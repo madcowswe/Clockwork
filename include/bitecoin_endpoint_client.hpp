@@ -74,14 +74,19 @@ public:
 			++nTrials;
 			
 			Log(Log_Debug, "Trial %d.", nTrials);
-			std::vector<uint32_t> indices(roundInfo->maxIndices);
+			//std::vector<uint32_t> indices(roundInfo->maxIndices);
+			std::vector<uint32_t> indices(2);
 			uint32_t curr=0;
+			// for(unsigned j=0;j<indices.size();j++){
+			// 	curr=curr+1+(rand()%10);
+			// 	indices[j]=curr;
+			// }
 			for(unsigned j=0;j<indices.size();j++){
-				curr=curr+1+(rand()%10);
+				curr+=(rand()/2);
 				indices[j]=curr;
 			}
 			
-			bigint_t proof=HashReference(roundInfo.get(), indices.size(), &indices[0]);
+			bigint_t proof=HashReference(roundInfo.get(), indices.size(), &indices[0]);//, m_log);
 			double score=wide_as_double(BIGINT_WORDS, proof.limbs);
 			Log(Log_Debug, "    Score=%lg", score);
 			
@@ -120,7 +125,9 @@ public:
 				Log(Log_Verbose, "Waiting for round to begin.");
 				auto beginRound=RecvPacket<Packet_ServerBeginRound>();
 				Log(Log_Info, "Round beginning with %u bytes of chain data.", beginRound->chainData.size());
+				Log(Log_Info, "ID: %u\tSteps: %u\tSalt:%#x\t\tc: 0x%x%x%x%x", beginRound->roundId, beginRound->hashSteps, beginRound->roundSalt, beginRound->c[3], beginRound->c[2], beginRound->c[1], beginRound->c[0]);
 				
+
 				Log(Log_Verbose, "Waiting for request for bid.");
 				auto requestBid=RecvPacket<Packet_ServerRequestBid>();
 				// Get an estimate of the skew between our clock and theirs. If it is positive,

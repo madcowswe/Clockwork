@@ -14,6 +14,7 @@
 #include <algorithm>
 
 #include "bitecoin_protocol.hpp"
+#include "bitecoin_log.hpp"
 
 namespace bitecoin{
 	
@@ -41,7 +42,7 @@ namespace bitecoin{
 		// hi(x) = hi(tmp) + carry
 		wide_add(4, x.limbs+4, tmp.limbs+4, carry);
 		
-		// overall:  tmp=lo(x)*c; x=tmp>hi(x)
+		// overall:  tmp=lo(x)*c; x=tmp+hi(x)
 	}
 	
 	// Given the various round parameters, this calculates the hash for a particular index value.
@@ -70,7 +71,29 @@ namespace bitecoin{
 			PoolHashStep(x, pParams);
 		}
 		return x;
-	}	
+	}
+
+	bigint_t PoolHashPreload(const Packet_ServerBeginRound *pParams){
+		assert(NLIMBS==4*2);
+		
+		// Incorporate the existing block chain data - in a real system this is the
+		// list of transactions we are signing. This is the FNV hash:
+		// http://en.wikipedia.org/wiki/Fowler%E2%80%93Noll%E2%80%93Vo_hash_function
+		hash::fnv<64> hasher;
+		uint64_t chainHash=hasher((const char*)&pParams->chainData[0], pParams->chainData.size());
+		
+		// The value x is 8 words long (8*32 bits in total)
+		// We build (MSB to LSB) as  [ chainHash ; roundSalt ; roundId ; index ]
+		bigint_t x;
+		wide_zero(8, x.limbs);
+		//wide_add(8, x.limbs, x.limbs, index);	//chosen index goes in at two low limbs
+		wide_add(6, x.limbs+2, x.limbs+2, pParams->roundId);	// Round goes in at limbs 3 and 2
+		wide_add(4, x.limbs+4, x.limbs+4, pParams->roundSalt);	// Salt goes in at limbs 5 and 4
+		wide_add(2, x.limbs+6, x.limbs+6, chainHash);	// chainHash at limbs 7 and 6
+
+		return x;
+	}
+
 	
 	// This is the complete hash reference function. Given the current round parameters,
 	// and the solution, which is a vector of indices, it calculates the proof. The goodness
@@ -79,12 +102,15 @@ namespace bitecoin{
 		const Packet_ServerBeginRound *pParams,
 		unsigned nIndices,
 		const uint32_t *pIndices
+		//,std::shared_ptr<ILog> log
 	){
 		if(nIndices>pParams->maxIndices)
 			throw std::invalid_argument("HashReference - Too many indices for parameter set.");
 		
 		bigint_t acc;
 		wide_zero(8, acc.limbs);
+
+		bigint_t point_preload = PoolHashPreload(pParams);
 		
 		for(unsigned i=0;i<nIndices;i++){
 			if(i>0){
@@ -93,13 +119,76 @@ namespace bitecoin{
 			}
 			
 			// Calculate the hash for this specific point
-			bigint_t point=PoolHash(pParams, pIndices[i]);
+			//bigint_t point=PoolHash(pParams, pIndices[i]);
+
+			bigint_t point = point_preload;
+			point.limbs[0] = pIndices[i];
+
+			// Now step forward by the number specified by the server
+			for(unsigned j=0;j<pParams->hashSteps;j++){
+				PoolHashStep(point, pParams);
+			}
 			
 			// Combine the hashes of the points together using xor
 			wide_xor(8, acc.limbs, acc.limbs, point.limbs);
 		}
 		
 		return acc;
+	}
+
+	//2 idx banks
+	bigint_t HashReferenceBanked(
+		const Packet_ServerBeginRound *pParams,
+		unsigned nIndices,
+		const uint32_t *pIdxbanks[2]
+		//,std::shared_ptr<ILog> log
+	){
+		std::vector<uint32_t> pointbanks[2];
+		pointbanks[0].reserve(nIndices);
+		pointbanks[1].reserve(nIndices);
+
+		bigint_t point_preload = PoolHashPreload(pParams);
+
+		for (unsigned currbank = 0; currbank < 2; ++currbank)
+		{
+			for (unsigned i = 0; i < nIndices; ++i)
+			{
+				bigint_t point = point_preload;
+				point.limbs[0] = pIdxbanks[currbank][i];
+
+				// Now step forward by the number specified by the server
+				for(unsigned j=0;j<pParams->hashSteps;j++){
+					PoolHashStep(point, pParams);
+				}
+
+				pointbanks[currbank][i] = point.limbs[7];
+			}
+		}
+
+		unsigned besti = 0;
+		unsigned bestj = 0;
+		uint32_t bestval = -1;
+		bool ndbreak = 1;
+		for (unsigned i = 0; ndbreak && i < nIndices; ++i)
+		{
+			for (unsigned j = 0; j < nIndices; ++j)
+			{
+				uint32_t currval = pointbanks[1][i] ^ pointbanks[0][j];
+				if (currval < bestval)
+				{
+					besti = i;
+					bestj = j;
+					bestval = currval;
+					if (currval == 0)
+					{
+						//log->Log(Log_Error, "Combined point MSB == 0");
+						ndbreak = 0;
+						break;
+					}
+				}
+			}
+		}
+
 	}
 	
 	/*! This is used to choose the winner. It is somewhat biased against the very fastest
