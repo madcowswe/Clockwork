@@ -100,6 +100,7 @@ namespace bitecoin{
 	// of the solution is determined by the numerical value of the proof.
 	bigint_t HashReference(
 		const Packet_ServerBeginRound *pParams,
+		bigint_t point_preload,
 		unsigned nIndices,
 		const uint32_t *pIndices
 		//,std::shared_ptr<ILog> log
@@ -109,8 +110,6 @@ namespace bitecoin{
 		
 		bigint_t acc;
 		wide_zero(8, acc.limbs);
-
-		bigint_t point_preload = PoolHashPreload(pParams);
 		
 		for(unsigned i=0;i<nIndices;i++){
 			if(i>0){
@@ -137,24 +136,25 @@ namespace bitecoin{
 	}
 
 	//2 idx banks
-	bigint_t HashReferenceBanked(
+	void HashReferenceBanked(
 		const Packet_ServerBeginRound *pParams,
+		bigint_t point_preload,
 		unsigned nIndices,
-		const uint32_t *pIdxbanks[2]
+		std::vector<uint32_t> idxbanks[2],
+		unsigned &besti,
+		unsigned &bestj 
 		//,std::shared_ptr<ILog> log
 	){
 		std::vector<uint32_t> pointbanks[2];
 		pointbanks[0].reserve(nIndices);
 		pointbanks[1].reserve(nIndices);
 
-		bigint_t point_preload = PoolHashPreload(pParams);
-
 		for (unsigned currbank = 0; currbank < 2; ++currbank)
 		{
 			for (unsigned i = 0; i < nIndices; ++i)
 			{
 				bigint_t point = point_preload;
-				point.limbs[0] = pIdxbanks[currbank][i];
+				point.limbs[0] = idxbanks[currbank][i];
 
 				// Now step forward by the number specified by the server
 				for(unsigned j=0;j<pParams->hashSteps;j++){
@@ -165,16 +165,17 @@ namespace bitecoin{
 			}
 		}
 
-		unsigned besti = 0;
-		unsigned bestj = 0;
+		besti = 0;
+		bestj = 0;
 		uint32_t bestval = -1;
 		bool ndbreak = 1;
+		unsigned nzero = 0;
 		for (unsigned i = 0; ndbreak && i < nIndices; ++i)
 		{
 			for (unsigned j = 0; j < nIndices; ++j)
 			{
 				uint32_t currval = pointbanks[1][i] ^ pointbanks[0][j];
-				if (currval < bestval)
+				if (currval <= bestval)
 				{
 					besti = i;
 					bestj = j;
@@ -182,11 +183,17 @@ namespace bitecoin{
 					if (currval == 0)
 					{
 						//log->Log(Log_Error, "Combined point MSB == 0");
-						ndbreak = 0;
-						break;
+						//ndbreak = 0;
+						//break;
+						nzero++;
 					}
 				}
 			}
+		}
+
+		if (nzero > 0)
+		{
+			fprintf(stderr, "Hit zero %u times\n", nzero);
 		}
 
 	}

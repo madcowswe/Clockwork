@@ -15,6 +15,7 @@
 #include "bitecoin_protocol.hpp"
 #include "bitecoin_endpoint.hpp"
 #include "bitecoin_hashing.hpp"
+#include "Clockwork.hpp"
 
 namespace bitecoin{
 
@@ -55,6 +56,7 @@ public:
 		uint32_t *pProof																		// Will contain the "proof", which is just the value
 	){
 		double tSafetyMargin=0.5;	// accounts for uncertainty in network conditions
+		tSafetyMargin+=0.5;	// latency of banked algo
 		/* This is when the server has said all bids must be produced by, plus the
 			adjustment for clock skew, and the safety margin
 		*/
@@ -74,26 +76,50 @@ public:
 			++nTrials;
 			
 			Log(Log_Debug, "Trial %d.", nTrials);
-			//std::vector<uint32_t> indices(roundInfo->maxIndices);
-			std::vector<uint32_t> indices(2);
-			uint32_t curr=0;
+
+			bigint_t point_preload = PoolHashPreload(roundInfo.get());
+
+			// //std::vector<uint32_t> indices(roundInfo->maxIndices);
+			// std::vector<uint32_t> indices(2);
+			// uint32_t curr=0;
+			// // for(unsigned j=0;j<indices.size();j++){
+			// // 	curr=curr+1+(rand()%10);
+			// // 	indices[j]=curr;
+			// // }
 			// for(unsigned j=0;j<indices.size();j++){
-			// 	curr=curr+1+(rand()%10);
+			// 	curr+=(rand()/2);
 			// 	indices[j]=curr;
 			// }
-			for(unsigned j=0;j<indices.size();j++){
-				curr+=(rand()/2);
-				indices[j]=curr;
+
+			unsigned N = 10000;
+			std::vector<uint32_t> idxbanks[2];
+			idxbanks[0].reserve(N);
+			idxbanks[1].reserve(N);
+
+			for (unsigned i = 0; i < N; ++i)
+			{
+				idxbanks[0][i] = rand()/2;
 			}
-			
-			bigint_t proof=HashReference(roundInfo.get(), indices.size(), &indices[0]);//, m_log);
+
+			for (unsigned i = 0; i < N; ++i)
+			{
+				idxbanks[1][i] = rand()/2 | (1<<31);
+			}
+
+			unsigned besti, bestj;
+			HashReferenceBanked(roundInfo.get(), point_preload, N, idxbanks, besti, bestj);
+
+			uint32_t bestidx[2] = {idxbanks[0][bestj], idxbanks[1][besti]};
+			bigint_t proof=HashReference(roundInfo.get(), point_preload, 2, bestidx);//, m_log);
+
 			double score=wide_as_double(BIGINT_WORDS, proof.limbs);
 			Log(Log_Debug, "    Score=%lg", score);
 			
 			if(wide_compare(BIGINT_WORDS, proof.limbs, bestProof.limbs)<0){
 				double worst=pow(2.0, BIGINT_LENGTH*8);	// This is the worst possible score
 				Log(Log_Verbose, "    Found new best, nTrials=%d, score=%lg, ratio=%lg.", nTrials, score, worst/score);
-				bestSolution=indices;
+				std::vector<uint32_t> resvec(bestidx, bestidx+2);
+				bestSolution = resvec;
 				bestProof=proof;
 			}
 			
