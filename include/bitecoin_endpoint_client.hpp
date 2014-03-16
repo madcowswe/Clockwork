@@ -91,6 +91,7 @@ public:
 			// 	indices[j]=curr;
 			// }
 
+//#define HR2BANKED
 #ifdef HR2BANKED
 
 			unsigned N = 10000;
@@ -114,11 +115,12 @@ public:
 			uint32_t bestidx[2] = {idxbanks[0][bestj], idxbanks[1][besti]};
 			bigint_t proof=HashReferencewPreload(roundInfo.get(), point_preload, 2, bestidx);//, m_log);
 
-# endif
+			unsigned k = 2;
+# else
 
 			unsigned kpow = 2;
-			unsigned k = (1<<kpow);
-			unsigned N = 128;
+			unsigned k = std::min((1u<<kpow), roundInfo->maxIndices);
+			unsigned N = 1<<(28/k);
 			unsigned subspace_size = 1<<(32-kpow);
 
 			std::vector<uint32_t> idxbanks[k];
@@ -146,6 +148,8 @@ public:
 				//fprintf(stderr, "select: bank %u\ti %u\tval %#x\n", i, besti[i], bestidx[i]);
 			}
 			bigint_t proof=HashReferencewPreload(roundInfo.get(), point_preload, k, bestidx);
+
+#endif
 
 			double score=wide_as_double(BIGINT_WORDS, proof.limbs);
 			Log(Log_Debug, "    Score=%lg", score);
@@ -186,7 +190,7 @@ public:
 				Log(Log_Verbose, "Waiting for round to begin.");
 				auto beginRound=RecvPacket<Packet_ServerBeginRound>();
 				Log(Log_Info, "Round beginning with %u bytes of chain data.", beginRound->chainData.size());
-				Log(Log_Info, "ID: %u\tSteps: %u\tSalt:%#x\t\tc: 0x%x%x%x%x", beginRound->roundId, beginRound->hashSteps, beginRound->roundSalt, beginRound->c[3], beginRound->c[2], beginRound->c[1], beginRound->c[0]);
+				Log(Log_Info, "ID: %u\tMaxIdx: %u\tSteps: %u\tSalt:%#x\tc: 0x%x%x%x%x", beginRound->roundId, beginRound->maxIndices, beginRound->hashSteps, beginRound->roundSalt, beginRound->c[3], beginRound->c[2], beginRound->c[1], beginRound->c[0]);
 				
 
 				Log(Log_Verbose, "Waiting for request for bid.");

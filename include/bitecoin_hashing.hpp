@@ -255,7 +255,7 @@ namespace bitecoin{
 					}
 
 					bestval = currval;
-					if (currval == 0) nzero++;
+					//if (currval == 0) nzero++;
 				}
 			}
 		} else {
@@ -317,16 +317,6 @@ namespace bitecoin{
 		}
 
 	}
-
-	// void HRkBankedPrecomp(
-	// 	const Packet_ServerBeginRound *pParams,
-	// 	bigint_t point_preload,
-	// 	unsigned nIndices,
-	// 	unsigned nLevels,
-	// 	std::vector<uint32_t> idxbanks[],
-	// 	std::vector<uint32_t> pointbanks[],
-	// 	unsigned besti[],
-	// )
 
 	
 	/*! This is used to choose the winner. It is somewhat biased against the very fastest
