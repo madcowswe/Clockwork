@@ -1,0 +1,26 @@
+# Compiled Object files
+*.slo
+*.lo
+*.o
+
+# Compiled Dynamic libraries
+*.so
+*.dylib
+
+# Compiled Static libraries
+*.lai
+*.la
+*.a
+
+# output binaries
+*.exe
+
+#dep files
+*.d
+
+VSWorkdir
+*.sdf
+*.v11.suo
+*.vcxproj.user
+*.opensdf
+*.pdb

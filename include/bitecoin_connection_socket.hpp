@@ -156,6 +156,25 @@ std::unique_ptr<Connection> OpenConnection_Socket(std::vector<std::string> &spec
 	}else if(spec[0]=="tcp-client"){
 		if(spec.size()!=3)
 			throw std::invalid_argument("OpenConnection_Socket - Spec should be 'tcp-client address port'.");
+
+		int e;
+
+		#if defined(_WIN32) || defined(_WIN64)
+		WORD wVersionRequested;
+		WSADATA wsaData;
+		int err;
+
+		/* Use the MAKEWORD(lowbyte, highbyte) macro declared in Windef.h */
+		wVersionRequested = MAKEWORD(2, 2);
+
+		e = WSAStartup(wVersionRequested, &wsaData);
+		if (e != 0) {
+			/* Tell the user that we could not find a usable */ 
+			/* Winsock DLL.                                  */ 
+			Throw<std::runtime_error>()<<"WSAStartup failed, got err="<<gai_strerror(e);
+			//return 1;
+		}
+		#endif
 		
 		std::string addr=spec[1];
 		std::string port=spec[2];
@@ -163,13 +182,14 @@ std::unique_ptr<Connection> OpenConnection_Socket(std::vector<std::string> &spec
 	
 		struct addrinfo hints;
 		memset(&hints, 0, sizeof(struct addrinfo));
-		hints.ai_family = AF_UNSPEC;    // IPv4 and IPv6
+		//hints.ai_family = AF_UNSPEC;    // IPv4 and IPv6.
+		hints.ai_family = AF_INET; // IPv6 breaks on localhost
 		hints.ai_socktype = SOCK_STREAM;
 		hints.ai_flags = 0;
 		hints.ai_protocol = IPPROTO_TCP;
 		
 		struct addrinfo *result;
-		int e=getaddrinfo(addr.c_str(), port.c_str(), &hints, &result);
+		e=getaddrinfo(addr.c_str(), port.c_str(), &hints, &result);
 		if(e!=0){
 			Throw<std::runtime_error>()<<"OpenConnection_Socket - Resolving addr='"<<addr<<"', port='"<<port<<"', got err="<<gai_strerror(e);
 		}
@@ -185,6 +205,13 @@ std::unique_ptr<Connection> OpenConnection_Socket(std::vector<std::string> &spec
 
 			if (connect(sock, curr->ai_addr, curr->ai_addrlen) != -1)
 				break;                  /* Success */
+
+			#if defined(_WIN32) || defined(_WIN64)
+			e=WSAGetLastError();
+			if (e)
+				fprintf(stderr, "Connecting failed, got error=%s",gai_strerror(e));
+			#endif
+
 			e=errno;
 
 			close(sock);

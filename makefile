@@ -1,5 +1,7 @@
 SHELL=/bin/bash
 
+#On doc machines, do export PATH=$PATH:/usr/local/cuda/bin
+
 CPPFLAGS += -std=c++11 -W -Wall -g -MMD
 CPPFLAGS += -O3
 CPPFLAGS += -I include -I src
@@ -39,6 +41,10 @@ EXCHANGE_PORT = 4123
 # Launch a client connected to a shared exchange
 connect_exchange : src/bitecoin_client
 	src/bitecoin_client Clockwork 3 tcp-client $(EXCHANGE_ADDR)  $(EXCHANGE_PORT)
+
+
+#src/bitecoin_client: src/bitecoin_client.o
+
 
 src/Clockwork_kernels.o: src/Clockwork_kernels.cu
 	nvcc -c $< -o $@

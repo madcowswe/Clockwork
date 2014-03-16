@@ -269,6 +269,7 @@ namespace bitecoin{
 	}
 
 	//k idx banks
+	template <unsigned ALLOCnLevels>
 	void HashReferencekBanked(
 		const Packet_ServerBeginRound *pParams,
 		bigint_t point_preload,
@@ -278,7 +279,7 @@ namespace bitecoin{
 		unsigned besti[]
 		//,std::shared_ptr<ILog> log
 	){
-		std::vector<uint32_t> pointbanks[nLevels];
+		std::vector<uint32_t> pointbanks[ALLOCnLevels];
 		for (unsigned i = 0; i < nLevels; ++i)
 		{
 			pointbanks[i].reserve(nIndices);
@@ -296,7 +297,7 @@ namespace bitecoin{
 					PoolHashStep(point, pParams);
 				}
 
-				pointbanks[currbank][i] = point.limbs[7];
+				pointbanks[currbank].push_back(point.limbs[7]);
 			}
 		}
 
@@ -307,7 +308,7 @@ namespace bitecoin{
 
 		uint32_t bestval = -1;
 		unsigned nzero = 0;
-		unsigned iters[nLevels-1]; //iters initialised in recursion
+		unsigned iters[ALLOCnLevels-1]; //iters initialised in recursion
 
 		HRrecurse( pointbanks, nIndices, nLevels, iters, besti, bestval, nzero, nLevels-1, 0);
 

@@ -118,12 +118,14 @@ public:
 			unsigned k = 2;
 # else
 
-			unsigned kpow = 2;
+			#define kpow 2
+			#define ALLOC_k (1u<<kpow)
+
 			unsigned k = std::min((1u<<kpow), roundInfo->maxIndices);
 			unsigned N = 1<<(28/k);
 			unsigned subspace_size = 1<<(32-kpow);
 
-			std::vector<uint32_t> idxbanks[k];
+			std::vector<uint32_t> idxbanks[ALLOC_k];
 			for (unsigned i = 0; i < k; ++i)
 			{
 				idxbanks[i].reserve(N);
@@ -133,15 +135,15 @@ public:
 			{
 				for (unsigned j = 0; j < N; ++j)
 				{
-					idxbanks[i][j] = (rand() & (subspace_size-1)) + i*subspace_size;
+					idxbanks[i].push_back((rand() & (subspace_size-1)) + i*subspace_size);
 					//fprintf(stderr, "gen: bank %u\ti %u\tval %#x\n", i, j, idxbanks[i][j]);
 				}
 			}
 
-			unsigned besti[k];
-			HashReferencekBanked(roundInfo.get(), point_preload, N, k, idxbanks, besti);
+			unsigned besti[ALLOC_k];
+			HashReferencekBanked<ALLOC_k>(roundInfo.get(), point_preload, N, k, idxbanks, besti);
 
-			uint32_t bestidx[k];
+			uint32_t bestidx[ALLOC_k];
 			for (unsigned i = 0; i < k; ++i)
 			{
 				bestidx[i] = idxbanks[i][besti[i]];
