@@ -40,6 +40,14 @@ EXCHANGE_PORT = 4123
 connect_exchange : src/bitecoin_client
 	src/bitecoin_client Clockwork 3 tcp-client $(EXCHANGE_ADDR)  $(EXCHANGE_PORT)
 
+src/Clockwork_kernels.o: src/Clockwork_kernels.cu
+	nvcc -c $< -o $@
+
+src/Clockwork_kernels: src/Clockwork_kernels.o
+	nvcc $^ -o $@
+
+test_cuda: src/Clockwork_kernels
+
 .PHONY: clean
 clean: 
 	-rm src/bitecoin_client.exe #src/bitecoin_server.exe
