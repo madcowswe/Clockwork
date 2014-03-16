@@ -15,7 +15,7 @@
 #include "bitecoin_protocol.hpp"
 #include "bitecoin_endpoint.hpp"
 #include "bitecoin_hashing.hpp"
-#include "Clockwork.hpp"
+//#include "Clockwork.hpp"
 
 namespace bitecoin{
 
@@ -23,8 +23,8 @@ class EndpointClient
 	: public Endpoint
 {
 private:
-	EndpointClient(EndpointClient &) = delete;
-	void operator =(const EndpointClient &) = delete;
+	EndpointClient(EndpointClient &);// = delete; //breaks VS
+	void operator =(const EndpointClient &);// = delete; //breaks VS
 
 	std::string m_minerId, m_clientId;
 
@@ -91,6 +91,8 @@ public:
 			// 	indices[j]=curr;
 			// }
 
+#ifdef HR2BANKED
+
 			unsigned N = 10000;
 			std::vector<uint32_t> idxbanks[2];
 			idxbanks[0].reserve(N);
@@ -103,14 +105,47 @@ public:
 
 			for (unsigned i = 0; i < N; ++i)
 			{
-				idxbanks[1][i] = rand()/2 | (1<<31);
+				idxbanks[1][i] = rand()/2 + (1<<31);
 			}
 
 			unsigned besti, bestj;
-			HashReferenceBanked(roundInfo.get(), point_preload, N, idxbanks, besti, bestj);
+			HashReference2Banked(roundInfo.get(), point_preload, N, idxbanks, besti, bestj);
 
 			uint32_t bestidx[2] = {idxbanks[0][bestj], idxbanks[1][besti]};
-			bigint_t proof=HashReference(roundInfo.get(), point_preload, 2, bestidx);//, m_log);
+			bigint_t proof=HashReferencewPreload(roundInfo.get(), point_preload, 2, bestidx);//, m_log);
+
+# endif
+
+			unsigned kpow = 2;
+			unsigned k = (1<<kpow);
+			unsigned N = 128;
+			unsigned subspace_size = 1<<(32-kpow);
+
+			std::vector<uint32_t> idxbanks[k];
+			for (unsigned i = 0; i < k; ++i)
+			{
+				idxbanks[i].reserve(N);
+			}
+
+			for (unsigned i = 0; i < k; ++i)
+			{
+				for (unsigned j = 0; j < N; ++j)
+				{
+					idxbanks[i][j] = (rand() & (subspace_size-1)) + i*subspace_size;
+					//fprintf(stderr, "gen: bank %u\ti %u\tval %#x\n", i, j, idxbanks[i][j]);
+				}
+			}
+
+			unsigned besti[k];
+			HashReferencekBanked(roundInfo.get(), point_preload, N, k, idxbanks, besti);
+
+			uint32_t bestidx[k];
+			for (unsigned i = 0; i < k; ++i)
+			{
+				bestidx[i] = idxbanks[i][besti[i]];
+				//fprintf(stderr, "select: bank %u\ti %u\tval %#x\n", i, besti[i], bestidx[i]);
+			}
+			bigint_t proof=HashReferencewPreload(roundInfo.get(), point_preload, k, bestidx);
 
 			double score=wide_as_double(BIGINT_WORDS, proof.limbs);
 			Log(Log_Debug, "    Score=%lg", score);
@@ -118,7 +153,7 @@ public:
 			if(wide_compare(BIGINT_WORDS, proof.limbs, bestProof.limbs)<0){
 				double worst=pow(2.0, BIGINT_LENGTH*8);	// This is the worst possible score
 				Log(Log_Verbose, "    Found new best, nTrials=%d, score=%lg, ratio=%lg.", nTrials, score, worst/score);
-				std::vector<uint32_t> resvec(bestidx, bestidx+2);
+				std::vector<uint32_t> resvec(bestidx, bestidx+k);
 				bestSolution = resvec;
 				bestProof=proof;
 			}

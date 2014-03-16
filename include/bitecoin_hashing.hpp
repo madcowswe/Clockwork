@@ -100,6 +100,36 @@ namespace bitecoin{
 	// of the solution is determined by the numerical value of the proof.
 	bigint_t HashReference(
 		const Packet_ServerBeginRound *pParams,
+		unsigned nIndices,
+		const uint32_t *pIndices
+	){
+		if(nIndices>pParams->maxIndices)
+			throw std::invalid_argument("HashReference - Too many indices for parameter set.");
+
+		bigint_t acc;
+		wide_zero(8, acc.limbs);
+
+		for(unsigned i=0;i<nIndices;i++){
+			if(i>0){
+				if(pIndices[i-1] >= pIndices[i])
+					throw std::invalid_argument("HashReference - Indices are not in monotonically increasing order.");
+			}
+
+			// Calculate the hash for this specific point
+			bigint_t point=PoolHash(pParams, pIndices[i]);
+
+			// Combine the hashes of the points together using xor
+			wide_xor(8, acc.limbs, acc.limbs, point.limbs);
+		}
+
+		return acc;
+	}
+
+	// This is the complete hash reference function. Given the current round parameters,
+	// and the solution, which is a vector of indices, it calculates the proof. The goodness
+	// of the solution is determined by the numerical value of the proof.
+	bigint_t HashReferencewPreload(
+		const Packet_ServerBeginRound *pParams,
 		bigint_t point_preload,
 		unsigned nIndices,
 		const uint32_t *pIndices
@@ -136,7 +166,7 @@ namespace bitecoin{
 	}
 
 	//2 idx banks
-	void HashReferenceBanked(
+	void HashReference2Banked(
 		const Packet_ServerBeginRound *pParams,
 		bigint_t point_preload,
 		unsigned nIndices,
@@ -197,6 +227,107 @@ namespace bitecoin{
 		}
 
 	}
+
+	void HRrecurse(
+		const std::vector<uint32_t>* const &pointbanks,
+		const unsigned &nIndices,
+		const unsigned &nLevels,
+		unsigned* const &iters,
+		unsigned* const &besti,
+		uint32_t &bestval,
+		unsigned &nzero,
+		unsigned mylevel,
+		uint32_t acc
+	){
+		if (mylevel == 0)
+		{
+			for (unsigned i = 0; i < nIndices; ++i)
+			{
+
+				uint32_t currval = acc ^ pointbanks[0][i];
+
+				if (currval <= bestval)
+				{
+					besti[0] = i;
+					for (unsigned j = 1; j < nLevels; ++j)
+					{
+						besti[j] = iters[j-1];
+					}
+
+					bestval = currval;
+					if (currval == 0) nzero++;
+				}
+			}
+		} else {
+
+			for (iters[mylevel-1] = 0; iters[mylevel-1] < nIndices; ++iters[mylevel-1])
+			{
+				HRrecurse( pointbanks, nIndices, nLevels, iters, besti, bestval, nzero, mylevel-1
+					, acc ^ pointbanks[mylevel][iters[mylevel-1]] );
+			}
+		}
+	}
+
+	//k idx banks
+	void HashReferencekBanked(
+		const Packet_ServerBeginRound *pParams,
+		bigint_t point_preload,
+		unsigned nIndices,
+		unsigned nLevels,
+		std::vector<uint32_t> idxbanks[],
+		unsigned besti[]
+		//,std::shared_ptr<ILog> log
+	){
+		std::vector<uint32_t> pointbanks[nLevels];
+		for (unsigned i = 0; i < nLevels; ++i)
+		{
+			pointbanks[i].reserve(nIndices);
+		}
+
+		for (unsigned currbank = 0; currbank < nLevels; ++currbank)
+		{
+			for (unsigned i = 0; i < nIndices; ++i)
+			{
+				bigint_t point = point_preload;
+				point.limbs[0] = idxbanks[currbank][i];
+
+				// Now step forward by the number specified by the server
+				for(unsigned j=0;j<pParams->hashSteps;j++){
+					PoolHashStep(point, pParams);
+				}
+
+				pointbanks[currbank][i] = point.limbs[7];
+			}
+		}
+
+		for (unsigned i = 0; i < nLevels; ++i)
+		{
+			besti[i] = 0;
+		}
+
+		uint32_t bestval = -1;
+		unsigned nzero = 0;
+		unsigned iters[nLevels-1]; //iters initialised in recursion
+
+		HRrecurse( pointbanks, nIndices, nLevels, iters, besti, bestval, nzero, nLevels-1, 0);
+
+		if (nzero > 0)
+		{
+			fprintf(stderr, "Hit zero %u times\n", nzero);
+		}
+
+	}
+
+	// void HRkBankedPrecomp(
+	// 	const Packet_ServerBeginRound *pParams,
+	// 	bigint_t point_preload,
+	// 	unsigned nIndices,
+	// 	unsigned nLevels,
+	// 	std::vector<uint32_t> idxbanks[],
+	// 	std::vector<uint32_t> pointbanks[],
+	// 	unsigned besti[],
+	// )
+
 	
 	/*! This is used to choose the winner. It is somewhat biased against the very fastest
 		people, so that it is still possible for slow people to occasionally win a coin.

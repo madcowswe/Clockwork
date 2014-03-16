@@ -6,7 +6,7 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
-#include <unistd.h> 
+//#include <unistd.h> 
 #include <csignal>
 
 int main(int argc, char *argv[])
@@ -16,9 +16,11 @@ int main(int argc, char *argv[])
 		exit(1);
 	}
 	
+
+#ifndef _MSC_VER
 	// We handle errors at the point of read/write
 	signal(SIGPIPE, SIG_IGN);	// Just look at error codes
-
+#endif
 	
 	try{		
 		std::string clientId=argv[1];
@@ -37,7 +39,7 @@ int main(int argc, char *argv[])
 		std::shared_ptr<bitecoin::ILog> logDest=std::make_shared<bitecoin::LogDest>(clientId, logLevel);
 		logDest->Log(bitecoin::Log_Info, "Created log.");
 		
-		std::unique_ptr<bitecoin::Connection> connection{bitecoin::OpenConnection(spec)};
+		std::unique_ptr<bitecoin::Connection> connection(bitecoin::OpenConnection(spec)); //VS breaks uniform initialization
 		
 		bitecoin::EndpointClient endpoint(clientId, minerId, connection, logDest);
 		endpoint.Run();
