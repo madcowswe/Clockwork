@@ -17,6 +17,9 @@
 #include "bitecoin_hashing.hpp"
 //#include "Clockwork.hpp"
 
+#include <cuda_runtime.h>
+int testcuda();
+
 namespace bitecoin{
 
 class EndpointClient
@@ -181,6 +184,9 @@ public:
 	void Run()
 	{
 		try{
+			Log(Log_Info, "Testing CUDA");
+			testcuda();
+
 			auto beginConnect=std::make_shared<Packet_ClientBeginConnect>(m_clientId, m_minerId);
 			Log(Log_Info, "Connecting with clientId=%s, minerId=%s", m_clientId.begin(), m_minerId.begin());
 			SendPacket(beginConnect);

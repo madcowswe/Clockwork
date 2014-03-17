@@ -4,6 +4,8 @@
 // By Ingemar Ragnemalm 2010
  
 #include <stdio.h>
+#include <cuda_runtime.h>
+#include "device_launch_parameters.h"
 
 const int N = 7;
 const int blocksize = 7;
@@ -14,7 +16,8 @@ void hello(char *a, int *b)
  a[threadIdx.x] += b[threadIdx.x];
 }
 
-int main()
+
+int testcuda()
 {
  char a[N] = "Hello ";
  int b[N] = {15, 10, 6, 0, -11, 1, 0};
@@ -38,5 +41,5 @@ int main()
  cudaFree( ad );
 
  printf("%s\n", a);
- return EXIT_SUCCESS;
+ return 0;
 }
