@@ -285,7 +285,7 @@ public:
 				Log(Log_Verbose, "Waiting for round to begin.");
 				auto beginRound=RecvPacket<Packet_ServerBeginRound>();
 				Log(Log_Info, "Round beginning with %u bytes of chain data.", beginRound->chainData.size());
-				Log(Log_Info, "ID: %u\tMaxIdx: %u\tSteps: %u\tSalt:%#x\tc: 0x%x%x%x%x", beginRound->roundId, beginRound->maxIndices, beginRound->hashSteps, beginRound->roundSalt, beginRound->c[3], beginRound->c[2], beginRound->c[1], beginRound->c[0]);
+				Log(Log_Info, "ID: %u\tMaxIdx: %u\tSteps: %u\tSalt: %#x\tc: 0x%08x%08x%08x%08x", beginRound->roundId, beginRound->maxIndices, beginRound->hashSteps, beginRound->roundSalt, beginRound->c[3], beginRound->c[2], beginRound->c[1], beginRound->c[0]);
 				
 
 				Log(Log_Verbose, "Waiting for request for bid.");

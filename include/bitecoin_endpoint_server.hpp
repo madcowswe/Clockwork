@@ -69,25 +69,25 @@ public:
 			
 			Log(Log_Verbose, "Connected to client.");
 			
-			uint64_t roundId=1234;
+			uint64_t roundId=0;//1234;
 			
 			while(1){
 				Log(Log_Info, "Starting round %llu.", roundId);
 				
 				auto beginRound=std::make_shared<Packet_ServerBeginRound>();
 				beginRound->roundId=roundId;
-				beginRound->roundSalt=0x20ad1d2f;//0;//rand();
+				beginRound->roundSalt=0;//0x1234beef;//0x20ad1d2f;//0;//rand();
 				beginRound->chainData.resize(16+(rand()%1000));
 				beginRound->maxIndices=16;
 				memset(beginRound->c, 0, BIGINT_LENGTH/2);
 				// These are just arbitrary values. The real exchange may choose
 				// different ones
-				beginRound->c[0]=0xd58065ff;//4294964621;
-				beginRound->c[1]=0xabbb1275;//4294967295;
-				beginRound->c[2]=0xc224d8ce;//3418534911;
-				beginRound->c[3]=0xb85422a0;//2138916474;
+				beginRound->c[0]=4294964621;//0x0baddeed;//0xd58065ff;//4294964621;
+				beginRound->c[1]=4294967295;//0x1337feed;//0xabbb1275;//4294967295;
+				beginRound->c[2]=3418534911;//0x600ddead;//0xc224d8ce;//3418534911;
+				beginRound->c[3]=0x10000000;//2138916474;//0xc0debeef;//0xb85422a0;//2138916474;
 				// Again exchange might choose differently
-				beginRound->hashSteps= 23;//16+rand()%16;
+				beginRound->hashSteps= 10;//16+rand()%16;
 
 				Log(Log_Verbose, "Sending chain data.\n");
 				SendPacket(beginRound);
