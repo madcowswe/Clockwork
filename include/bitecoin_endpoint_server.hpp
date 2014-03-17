@@ -76,7 +76,7 @@ public:
 				
 				auto beginRound=std::make_shared<Packet_ServerBeginRound>();
 				beginRound->roundId=roundId;
-				beginRound->roundSalt=0;//0x20ad1d2f;//0;//rand();
+				beginRound->roundSalt=0x20ad1d2f;//0;//rand();
 				beginRound->chainData.resize(16+(rand()%1000));
 				beginRound->maxIndices=16;
 				memset(beginRound->c, 0, BIGINT_LENGTH/2);

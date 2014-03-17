@@ -311,7 +311,7 @@ public:
 				}
 
 				Log(Log_Verbose, "    Diff is       0x%08x", bid->solution[1] - bid->solution[0]);
-				Log(Log_Verbose, "    MSW is        0x%08x", bid->solution[1] - bid->proof[7]);
+				Log(Log_Verbose, "    MSW is        0x%08x", bid->proof[7]);
 
 				SendPacket(bid);
 				Log(Log_Verbose, "Bid sent.");
