@@ -59,6 +59,7 @@ namespace bitecoin{
 		
 		// The value x is 8 words long (8*32 bits in total)
 		// We build (MSB to LSB) as  [ chainHash ; roundSalt ; roundId ; index ]
+		// [hashlo hashlo, saltlo saltlo, roundidlo rounidlo, 0 index]
 		bigint_t x;
 		wide_zero(8, x.limbs);
 		wide_add(8, x.limbs, x.limbs, index);	//chosen index goes in at two low limbs
@@ -163,6 +164,27 @@ namespace bitecoin{
 		}
 		
 		return acc;
+	}
+
+	void pointsFromIdx(
+		const Packet_ServerBeginRound *pParams,
+		bigint_t point_preload,
+		unsigned nIndices,
+		uint32_t* idxbank,
+		uint32_t* pointbank
+	){
+		for (unsigned i = 0; i < nIndices; ++i)
+		{
+			bigint_t point = point_preload;
+			point.limbs[0] = idxbank[i];
+
+			// Now step forward by the number specified by the server
+			for(unsigned j=0;j<pParams->hashSteps;j++){
+				PoolHashStep(point, pParams);
+			}
+
+			pointbank[i] = point.limbs[7];
+		}
 	}
 
 	//2 idx banks
@@ -280,25 +302,10 @@ namespace bitecoin{
 		//,std::shared_ptr<ILog> log
 	){
 		std::vector<uint32_t> pointbanks[ALLOCnLevels];
-		for (unsigned i = 0; i < nLevels; ++i)
-		{
-			pointbanks[i].reserve(nIndices);
-		}
-
 		for (unsigned currbank = 0; currbank < nLevels; ++currbank)
-		{
-			for (unsigned i = 0; i < nIndices; ++i)
-			{
-				bigint_t point = point_preload;
-				point.limbs[0] = idxbanks[currbank][i];
-
-				// Now step forward by the number specified by the server
-				for(unsigned j=0;j<pParams->hashSteps;j++){
-					PoolHashStep(point, pParams);
-				}
-
-				pointbanks[currbank].push_back(point.limbs[7]);
-			}
+		{	
+			pointbanks[currbank].resize(nIndices);
+			pointsFromIdx(pParams, point_preload, nIndices, &idxbanks[currbank][0], &pointbanks[currbank][0]);
 		}
 
 		for (unsigned i = 0; i < nLevels; ++i)

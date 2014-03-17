@@ -49,8 +49,8 @@ int testcuda()
 template <unsigned N>
 __global__ void Clockwork(uint32_t* staticbank,
 						  uint32_t* regbank,
-						  uint32_t* sharedbank1,
 						  uint32_t* sharedbank2,
+						  uint32_t* sharedbank1,
 						  //uint32_t N,
 						  int* bestiBuff,
 						  int* bestiBuffHead)
@@ -97,5 +97,18 @@ __global__ void Clockwork(uint32_t* staticbank,
 			}
 		}
 	}
+}
 
+
+void Clockwork_wrapper(uint32_t* staticbank,
+						  uint32_t* regbank,
+						  uint32_t* sharedbank2,
+						  uint32_t* sharedbank1,
+						  //uint32_t N,
+						  int* bestiBuff,
+						  int* bestiBuffHead,
+						  int blocks,
+						  int threadsPerBlock)
+{
+	Clockwork <128> <<<blocks, threadsPerBlock>>> (staticbank, regbank, sharedbank2, sharedbank1, bestiBuff, bestiBuffHead);
 }

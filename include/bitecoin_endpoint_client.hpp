@@ -17,8 +17,26 @@
 #include "bitecoin_hashing.hpp"
 //#include "Clockwork.hpp"
 
+#define HR2BANKED
+//#define HRkBANKED
+//#define HRCUDA
+
+#ifdef HRCUDA
 #include <cuda_runtime.h>
 int testcuda();
+
+//template <unsigned N>
+void Clockwork_wrapper(uint32_t* staticbank,
+						  uint32_t* regbank,
+						  uint32_t* sharedbank2,
+						  uint32_t* sharedbank1,
+						  //uint32_t N,
+						  int* bestiBuff,
+						  int* bestiBuffHead,
+						  int blocks,
+						  int threadsPerBlock);
+
+#endif
 
 namespace bitecoin{
 
@@ -94,7 +112,6 @@ public:
 			// 	indices[j]=curr;
 			// }
 
-//#define HR2BANKED
 #ifdef HR2BANKED
 
 			unsigned N = 10000;
@@ -119,7 +136,8 @@ public:
 			bigint_t proof=HashReferencewPreload(roundInfo.get(), point_preload, 2, bestidx);//, m_log);
 
 			unsigned k = 2;
-# else
+#endif
+#ifdef HRkBANKED
 
 			#define kpow 2
 			#define ALLOC_k (1u<<kpow)
@@ -155,6 +173,73 @@ public:
 			bigint_t proof=HashReferencewPreload(roundInfo.get(), point_preload, k, bestidx);
 
 #endif
+#ifdef HRCUDA
+			cudaError e;
+
+			#define blocks 6
+			#define threadsPerBlock 1024
+			#define N 128
+			size_t banksizeBytes = N*sizeof(uint32_t);
+
+			uint32_t staticidx[blocks*threadsPerBlock];
+			uint32_t regidx[N];
+			uint32_t sharedidx2[N];
+			uint32_t sharedidx1[N];
+			uint32_t staticpoints[blocks*threadsPerBlock];
+			uint32_t regpoints[N];
+			uint32_t sharedpoints2[N];
+			uint32_t sharedpoints1[N];
+
+			unsigned subspace_size = 1<<30;
+			for (int i = 0; i < blocks*threadsPerBlock; ++i){
+				staticidx[i] = (rand() & (subspace_size-1)) + 3*subspace_size;
+			}
+			for (int i = 0; i < N; ++i){
+				regidx[i] = (rand() & (subspace_size-1)) + 2*subspace_size;
+			}
+			for (int i = 0; i < N; ++i){
+				sharedidx2[i] = (rand() & (subspace_size-1)) + 1*subspace_size;
+			}
+			for (int i = 0; i < N; ++i){
+				sharedidx1[i] = (rand() & (subspace_size-1)) + 0*subspace_size;
+			}
+
+			pointsFromIdx(roundInfo.get(), point_preload, blocks*threadsPerBlock, staticidx, staticpoints);
+			pointsFromIdx(roundInfo.get(), point_preload, N, regidx, regpoints);
+			pointsFromIdx(roundInfo.get(), point_preload, N, sharedidx2, sharedpoints2);
+			pointsFromIdx(roundInfo.get(), point_preload, N, sharedidx1, sharedpoints1);
+
+			uint32_t* staticbank_GPU, *regbank_GPU, *sharedbank1_GPU, *sharedbank2_GPU;
+			if(e = cudaMalloc(&staticbank_GPU, blocks*threadsPerBlock*sizeof(uint32_t))) fprintf(stderr, "Cuda error %d on line %d\n", e, __LINE__);
+			if(e = cudaMalloc(&regbank_GPU, banksizeBytes)) fprintf(stderr, "Cuda error %d on line %d\n", e, __LINE__);
+			if(e = cudaMalloc(&sharedbank2_GPU, banksizeBytes)) fprintf(stderr, "Cuda error %d on line %d\n", e, __LINE__);
+			if(e = cudaMalloc(&sharedbank1_GPU, banksizeBytes)) fprintf(stderr, "Cuda error %d on line %d\n", e, __LINE__);
+
+			if(e = cudaMemcpy(staticbank_GPU, staticpoints, blocks*threadsPerBlock*sizeof(uint32_t), cudaMemcpyHostToDevice)) fprintf(stderr, "Cuda error %d on line %d\n", e, __LINE__);
+			if(e = cudaMemcpy(regbank_GPU, regpoints, banksizeBytes, cudaMemcpyHostToDevice)) fprintf(stderr, "Cuda error %d on line %d\n", e, __LINE__);
+			if(e = cudaMemcpy(sharedbank2_GPU, sharedpoints2, banksizeBytes, cudaMemcpyHostToDevice)) fprintf(stderr, "Cuda error %d on line %d\n", e, __LINE__);
+			if(e = cudaMemcpy(sharedbank1_GPU, sharedpoints1, banksizeBytes, cudaMemcpyHostToDevice)) fprintf(stderr, "Cuda error %d on line %d\n", e, __LINE__);
+
+			int* bestiBuff_GPU;
+			if(e = cudaMalloc(&bestiBuff_GPU, 4*1024*sizeof(int))) fprintf(stderr, "Cuda error %d on line %d\n", e, __LINE__);
+
+			__device__ int theHeadPtr_GPU;
+			if(e = cudaMemset(&theHeadPtr_GPU, 0, sizeof(int))) fprintf(stderr, "Cuda error %d on line %d\n", e, __LINE__);
+			//int z = 0;
+			//cudaMemcpyToSymbol(&theHeadPtr_GPU, &z, sizeof(int));
+
+			cudaDeviceSetCacheConfig(cudaFuncCachePreferShared);
+
+			//TODO Make N variable
+
+			Clockwork_wrapper (staticbank_GPU, regbank_GPU, sharedbank2_GPU, sharedbank1_GPU, bestiBuff_GPU, &theHeadPtr_GPU, blocks, threadsPerBlock);
+
+
+			
+			bigint_t proof; // = TODO
+			uint32_t bestidx[4]; //TODO, change this!
+			unsigned k = 4;
+#endif
 
 			double score=wide_as_double(BIGINT_WORDS, proof.limbs);
 			Log(Log_Debug, "    Score=%lg", score);
@@ -184,8 +269,10 @@ public:
 	void Run()
 	{
 		try{
+			#ifdef HRCUDA
 			Log(Log_Info, "Testing CUDA");
 			testcuda();
+			#endif
 
 			auto beginConnect=std::make_shared<Packet_ClientBeginConnect>(m_clientId, m_minerId);
 			Log(Log_Info, "Connecting with clientId=%s, minerId=%s", m_clientId.begin(), m_minerId.begin());
@@ -217,7 +304,15 @@ public:
 				MakeBid(beginRound, requestBid, period, skewEstimate, bid->solution, bid->proof);
 				bid->timeSent=now();				
 				Log(Log_Verbose, "Bid ready.");
-				
+
+				for (unsigned i = 0; i < bid->solution.size(); ++i)
+				{
+					Log(Log_Verbose, "    Indicies were 0x%08x", bid->solution[bid->solution.size()-1-i]);
+				}
+
+				Log(Log_Verbose, "    Diff is       0x%08x", bid->solution[1] - bid->solution[0]);
+				Log(Log_Verbose, "    MSW is        0x%08x", bid->solution[1] - bid->proof[7]);
+
 				SendPacket(bid);
 				Log(Log_Verbose, "Bid sent.");
 				

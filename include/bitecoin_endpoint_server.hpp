@@ -69,25 +69,25 @@ public:
 			
 			Log(Log_Verbose, "Connected to client.");
 			
-			uint64_t roundId=1;
+			uint64_t roundId=1234;
 			
 			while(1){
 				Log(Log_Info, "Starting round %llu.", roundId);
 				
 				auto beginRound=std::make_shared<Packet_ServerBeginRound>();
 				beginRound->roundId=roundId;
-				beginRound->roundSalt=rand();
+				beginRound->roundSalt=0;//0x20ad1d2f;//0;//rand();
 				beginRound->chainData.resize(16+(rand()%1000));
 				beginRound->maxIndices=16;
 				memset(beginRound->c, 0, BIGINT_LENGTH/2);
 				// These are just arbitrary values. The real exchange may choose
 				// different ones
-				beginRound->c[0]=4294964621;
-				beginRound->c[1]=4294967295;
-				beginRound->c[2]=3418534911;
-				beginRound->c[3]=2138916474;
+				beginRound->c[0]=0xd58065ff;//4294964621;
+				beginRound->c[1]=0xabbb1275;//4294967295;
+				beginRound->c[2]=0xc224d8ce;//3418534911;
+				beginRound->c[3]=0xb85422a0;//2138916474;
 				// Again exchange might choose differently
-				beginRound->hashSteps=16+rand()%16;
+				beginRound->hashSteps= 23;//16+rand()%16;
 
 				Log(Log_Verbose, "Sending chain data.\n");
 				SendPacket(beginRound);
@@ -97,6 +97,9 @@ public:
 				double roundLength=(rand()+1.0)/RAND_MAX;
 				roundLength=-log(roundLength)*2.75+0.25;
 				roundLength=std::max(0.25, std::min(60.0, roundLength));
+
+				//Testing override
+				roundLength = 30;
 				
 				timestamp_t start=now();
 				timestamp_t finish=uint64_t(start+roundLength*1e9);
