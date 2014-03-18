@@ -259,6 +259,9 @@ public:
 			}
 
 			uint32_t bestidx[4] = { idxbanks[bestIndex[0]], idxbanks[bestIndex[0]] + diff, idxbanks[bestIndex[1]], idxbanks[bestIndex[1]] + diff};
+
+			std::sort(&bestidx[0], &bestidx[0] + 4);
+
 			//Sort bestidx
 			bigint_t proof = HashReferencewPreload(roundInfo.get(), point_preload, 4, bestidx);
 
