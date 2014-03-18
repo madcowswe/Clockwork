@@ -19,7 +19,8 @@
 
 #include <random>
 
-#define HR2BANKED
+//#define HR2BANKED
+#define DIFFTHINGY
 //#define HR2BANKED_DEGEN
 //#define HRkBANKED
 //#define HRCUDA
@@ -42,6 +43,19 @@ void Clockwork_wrapper(uint32_t* staticbank,
 #endif
 
 namespace bitecoin{
+
+	struct metapointBank
+	{
+		uint32_t lower_index;
+		uint32_t upper;
+		uint32_t lower;
+	};
+
+	struct DoubleMSB
+	{
+		uint32_t upper;
+		uint32_t lower;
+	};
 
 class EndpointClient
 	: public Endpoint
@@ -164,6 +178,94 @@ public:
 			// 	indices[j]=curr;
 			// }
 
+#ifdef DIFFTHINGY
+			unsigned diff = 0x94632009; //FROM OSKAR
+			unsigned N = 10000;
+			std::vector<uint32_t> indices(roundInfo->maxIndices);
+			std::vector<uint32_t> idxbanks[2];
+			//Generate first indicies
+			for (unsigned i = 0; i < N; ++i)
+			{
+				idxbanks[0][i] = rand() / 2;
+			}
+			//Add golden diff
+			for (unsigned i = 0; i < N; ++i)
+			{
+				//TODO: realise the maximum size of diff, and allow lower bank to generate upto INTMAX-max(diff)
+				idxbanks[1][i] = idxbanks[0][i] + diff;
+			}
+
+			//Generate point for each index pair
+			std::vector<DoubleMSB> pointbanks[2];
+			pointbanks[0].reserve(N);
+			pointbanks[1].reserve(N);
+
+			for (unsigned currbank = 0; currbank < 2; ++currbank)
+			{
+				for (unsigned i = 0; i < N; ++i)
+				{
+					bigint_t point = point_preload;
+					point.limbs[0] = idxbanks[currbank][i];
+
+					// Now step forward by the number specified by the server
+					for (unsigned j = 0; j<roundInfo.get()->hashSteps; j++){
+						//Needs to become 64 bit (upper 2 MSW)
+						PoolHashStep(point, roundInfo.get());
+					}
+
+					pointbanks[currbank][i].upper = point.limbs[7];
+					pointbanks[currbank][i].lower = point.limbs[6];
+				}
+			}
+			
+			//XOR point pair to make meta-point and put in bank
+			std::vector<metapointBank> idx_mpoint_bank;
+			idx_mpoint_bank.reserve(N*N);
+			for (unsigned i = 0; i < N; ++i)
+			{
+				//for (unsigned j = 0; j < N; ++j)
+				//{
+					idx_mpoint_bank[i].lower_index = idxbanks[0][i];
+					idx_mpoint_bank[i].lower = pointbanks[1][i].lower ^ pointbanks[0][i].lower;
+					idx_mpoint_bank[i].upper = pointbanks[1][i].upper ^ pointbanks[0][i].upper;
+				//}
+			}
+
+			//XOR meta-points and find minimum
+			uint32_t bestIndex;
+			DoubleMSB currentMin = { -1, -1 };
+			DoubleMSB currentValue;
+
+			for (unsigned i = 0; i < N*N; ++i)
+			{
+				for (unsigned j = 0; j < i-1; ++j)
+				{
+					if (i == j)
+						assert(false);
+					
+					//Check indicies are distinct, if so, carry on
+					if (idx_mpoint_bank[i].lower_index == idx_mpoint_bank[j].lower_index)
+						continue;
+
+					currentValue.lower = idx_mpoint_bank[i].lower ^ idx_mpoint_bank[j].lower;
+					currentValue.upper = idx_mpoint_bank[i].upper ^ idx_mpoint_bank[j].upper;
+					
+					if (currentValue.upper < currentMin.upper || (currentValue.upper == currentMin.upper && currentValue.lower < currentMin.lower))
+					{
+						bestIndex = idx_mpoint_bank[i].lower_index;
+						currentMin.lower = currentValue.lower;
+						currentMin.upper = currentValue.upper;
+					}
+				}
+			}
+
+			uint32_t bestidx[2] = { idxbanks[0][bestIndex], idxbanks[1][bestIndex+diff] };
+			bigint_t proof = HashReferencewPreload(roundInfo.get(), point_preload, 2, bestidx);
+
+			unsigned k = 2;
+
+
+#endif
 
 #ifdef HR2BANKED
 
