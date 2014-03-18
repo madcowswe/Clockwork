@@ -17,6 +17,8 @@
 #include "bitecoin_hashing.hpp"
 //#include "Clockwork.hpp"
 
+#include <random>
+
 #define HR2BANKED
 //#define HR2BANKED_DEGEN
 //#define HRkBANKED
@@ -92,6 +94,55 @@ public:
 		std::vector<uint32_t> bestSolution(roundInfo->maxIndices);
 		bigint_t bestProof;
 		wide_ones(BIGINT_WORDS, bestProof.limbs);
+
+		bigint_t point_preload = PoolHashPreload(roundInfo.get());
+		//bigint_t point_preload = PoolHashPreload_Nonbroken(roundInfo.get());
+
+		unsigned N = 1<<16;
+		std::vector<std::pair<uint64_t, uint32_t>> pointidxbank(N);
+		auto fastrand = std::minstd_rand();
+		for (unsigned i = 0; i < N; i++)
+		{
+			uint32_t curridx = fastrand();
+			bigint_t point = point_preload;
+			point.limbs[0] = curridx;
+
+			for(unsigned j=0;j<roundInfo->hashSteps;j++){
+				PoolHashStep(point, roundInfo.get());
+			}
+
+			uint64_t point64 = ((uint64_t)point.limbs[7] << 32) + point.limbs[6];
+			pointidxbank[i] = std::make_pair(point64, curridx);
+		}
+
+		std::sort(pointidxbank.begin(), pointidxbank.end());
+
+		uint32_t GoldenDiff = 0;
+		uint64_t bestdistance = -1;
+		for (unsigned i = 0; i < N-1u; i++)
+		{
+			uint64_t a = pointidxbank[i].first;
+			uint64_t b = pointidxbank[i+1].first;
+			uint64_t currabsdiff;
+			if (a>b)
+				currabsdiff = a-b;
+			else
+				currabsdiff = b-a;
+
+			if (currabsdiff < bestdistance)
+			{
+				bestdistance = currabsdiff;
+				uint32_t aidx = pointidxbank[i].second;
+				uint32_t bidx = pointidxbank[i+1].second;
+				if (aidx > bidx)
+					GoldenDiff = aidx - bidx;
+				else
+					GoldenDiff = bidx - aidx;
+			}
+
+		}
+
+		Log(Log_Verbose, "Best distance 0x%016x\t GoldenDiff %08x", bestdistance, GoldenDiff);
 		
 		unsigned nTrials=0;
 		while(1){
@@ -99,8 +150,7 @@ public:
 			
 			Log(Log_Debug, "Trial %d.", nTrials);
 
-			bigint_t point_preload = PoolHashPreload(roundInfo.get());
-			//bigint_t point_preload = PoolHashPreload_Nonbroken(roundInfo.get());
+
 
 			// //std::vector<uint32_t> indices(roundInfo->maxIndices);
 			// std::vector<uint32_t> indices(2);
@@ -113,6 +163,7 @@ public:
 			// 	curr+=(rand()/2);
 			// 	indices[j]=curr;
 			// }
+
 
 #ifdef HR2BANKED
 
