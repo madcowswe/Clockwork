@@ -44,7 +44,7 @@ void Clockwork_wrapper(uint32_t* staticbank,
 
 namespace bitecoin{
 
-	struct metapointBank
+	struct metapoint
 	{
 		uint32_t lower_index;
 		uint32_t upper;
@@ -217,7 +217,7 @@ public:
 			}
 
 			//XOR point pair to make meta-point and put in bank
-			std::vector<metapointBank> idx_mpoint_bank;
+			std::vector<metapoint> idx_mpoint_bank;
 			idx_mpoint_bank.resize(N);
 			for (unsigned i = 0; i < N; ++i)
 			{
