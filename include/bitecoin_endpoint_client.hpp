@@ -47,14 +47,7 @@ namespace bitecoin{
 	struct metapoint
 	{
 		uint32_t lower_index;
-		uint32_t upper;
-		uint32_t lower;
-	};
-
-	struct DoubleMSB
-	{
-		uint32_t upper;
-		uint32_t lower;
+		uint64_t value;
 	};
 
 class EndpointClient
@@ -182,25 +175,18 @@ public:
 			std::vector<uint32_t> idxbanks;
 			idxbanks.resize(N);
 
+			//Generate point for each index pair
+			std::vector<uint64_t> pointbanks[2];
+			pointbanks[0].resize(N);
+			pointbanks[1].resize(N);
+			std::vector<metapoint> idx_mpoint_bank;
+			idx_mpoint_bank.resize(N);
+
 			for (unsigned i = 0; i < N; ++i)
 			{
 				idxbanks[i] = rand() / 2;
-			}
-			//Add golden diff
-			//for (unsigned i = 0; i < N; ++i)
-			//{
-			//	//TODO: realise the maximum size of diff, and allow lower bank to generate upto INTMAX-max(diff)
-			//	idxbanks[1][i] = idxbanks[0][i] + diff;
-			//}
 
-			//Generate point for each index pair
-			std::vector<DoubleMSB> pointbanks[2];
-			pointbanks[0].resize(N);
-			pointbanks[1].resize(N);
-
-			for (unsigned currbank = 0; currbank < 2; ++currbank)
-			{
-				for (unsigned i = 0; i < N; ++i)
+				for (unsigned currbank = 0; currbank < 2; ++currbank)
 				{
 					bigint_t point = point_preload;
 					point.limbs[0] = idxbanks[i] + currbank*diff;
@@ -211,28 +197,20 @@ public:
 						PoolHashStep(point, roundInfo.get());
 					}
 
-					pointbanks[currbank][i].upper = point.limbs[7];
-					pointbanks[currbank][i].lower = point.limbs[6];
+					pointbanks[currbank][i] = ((uint64_t)point.limbs[7] << 32) + point.limbs[6];
 				}
-			}
 
-			//XOR point pair to make meta-point and put in bank
-			std::vector<metapoint> idx_mpoint_bank;
-			idx_mpoint_bank.resize(N);
-			for (unsigned i = 0; i < N; ++i)
-			{
-				//for (unsigned j = 0; j < N; ++j)
-				//{
+				//XOR point pair to make meta-point and put in bank
 				idx_mpoint_bank[i].lower_index = idxbanks[i];
 				idx_mpoint_bank[i].lower = pointbanks[1][i].lower ^ pointbanks[0][i].lower;
 				idx_mpoint_bank[i].upper = pointbanks[1][i].upper ^ pointbanks[0][i].upper;
-				//}
 			}
 
+			
 			//XOR meta-points and find minimum
 			uint32_t bestIndex[2];
-			DoubleMSB currentMin = { -1, -1 };
-			DoubleMSB currentValue;
+			uint64_t currentMin = -1;
+			uint64_t currentValue;
 
 			for (unsigned i = 0; i < N; ++i)
 			{
