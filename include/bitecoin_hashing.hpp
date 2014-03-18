@@ -61,12 +61,22 @@ namespace bitecoin{
 		// We build (MSB to LSB) as  [ chainHash ; roundSalt ; roundId ; index ]
 		// [hashlo hashlo, saltlo saltlo, roundidlo rounidlo, 0 index]
 		bigint_t x;
-		wide_zero(8, x.limbs);
-		wide_add(8, x.limbs, x.limbs, index);	//chosen index goes in at two low limbs
-		wide_add(6, x.limbs+2, x.limbs+2, pParams->roundId);	// Round goes in at limbs 3 and 2
-		wide_add(4, x.limbs+4, x.limbs+4, pParams->roundSalt);	// Salt goes in at limbs 5 and 4
-		wide_add(2, x.limbs+6, x.limbs+6, chainHash);	// chainHash at limbs 7 and 6
-		
+		// wide_zero(8, x.limbs);
+		// wide_add(8, x.limbs, x.limbs, index);	//chosen index goes in at two low limbs
+		// wide_add(6, x.limbs+2, x.limbs+2, pParams->roundId);	// Round goes in at limbs 3 and 2
+		// wide_add(4, x.limbs+4, x.limbs+4, pParams->roundSalt);	// Salt goes in at limbs 5 and 4
+		// wide_add(2, x.limbs+6, x.limbs+6, chainHash);	// chainHash at limbs 7 and 6
+
+		uint64_t mask = (1ull << 32) - 1;
+		x.limbs[7] = (uint32_t)(chainHash & mask);
+		x.limbs[6] = x.limbs[7];
+		x.limbs[5] = (uint32_t)(pParams->roundSalt & mask);
+		x.limbs[4] = x.limbs[5];
+		x.limbs[3] = (uint32_t)(pParams->roundId & mask);
+		x.limbs[2] = x.limbs[3];
+		x.limbs[1] = 0;
+		x.limbs[0] = index;
+
 		// Now step forward by the number specified by the server
 		for(unsigned j=0;j<pParams->hashSteps;j++){
 			PoolHashStep(x, pParams);
@@ -85,12 +95,55 @@ namespace bitecoin{
 		
 		// The value x is 8 words long (8*32 bits in total)
 		// We build (MSB to LSB) as  [ chainHash ; roundSalt ; roundId ; index ]
+		// [hashlo hashlo, saltlo saltlo, roundidlo rounidlo, 0 index]
 		bigint_t x;
 		wide_zero(8, x.limbs);
-		//wide_add(8, x.limbs, x.limbs, index);	//chosen index goes in at two low limbs
-		wide_add(6, x.limbs+2, x.limbs+2, pParams->roundId);	// Round goes in at limbs 3 and 2
-		wide_add(4, x.limbs+4, x.limbs+4, pParams->roundSalt);	// Salt goes in at limbs 5 and 4
-		wide_add(2, x.limbs+6, x.limbs+6, chainHash);	// chainHash at limbs 7 and 6
+		// //wide_add(8, x.limbs, x.limbs, index);	//chosen index goes in at two low limbs
+		// wide_add(6, x.limbs+2, x.limbs+2, pParams->roundId);	// Round goes in at limbs 3 and 2
+		// wide_add(4, x.limbs+4, x.limbs+4, pParams->roundSalt);	// Salt goes in at limbs 5 and 4
+		// wide_add(2, x.limbs+6, x.limbs+6, chainHash);	// chainHash at limbs 7 and 6
+
+		uint64_t mask = (1ull << 32) - 1;
+		x.limbs[7] = (uint32_t)(chainHash & mask);
+		x.limbs[6] = x.limbs[7];
+		x.limbs[5] = (uint32_t)(pParams->roundSalt & mask);
+		x.limbs[4] = x.limbs[5];
+		x.limbs[3] = (uint32_t)(pParams->roundId & mask);
+		x.limbs[2] = x.limbs[3];
+		x.limbs[1] = 0;
+		x.limbs[0] = 0;
+
+		return x;
+	}
+
+	bigint_t PoolHashPreload_Nonbroken(const Packet_ServerBeginRound *pParams){
+		assert(NLIMBS==4*2);
+		
+		// Incorporate the existing block chain data - in a real system this is the
+		// list of transactions we are signing. This is the FNV hash:
+		// http://en.wikipedia.org/wiki/Fowler%E2%80%93Noll%E2%80%93Vo_hash_function
+		hash::fnv<64> hasher;
+		uint64_t chainHash=hasher((const char*)&pParams->chainData[0], pParams->chainData.size());
+		
+		// The value x is 8 words long (8*32 bits in total)
+		// We build (MSB to LSB) as  [ chainHash ; roundSalt ; roundId ; index ]
+		// [hashlo hashlo, saltlo saltlo, roundidlo rounidlo, 0 index]
+		bigint_t x;
+		wide_zero(8, x.limbs);
+		// //wide_add(8, x.limbs, x.limbs, index);	//chosen index goes in at two low limbs
+		// wide_add(6, x.limbs+2, x.limbs+2, pParams->roundId);	// Round goes in at limbs 3 and 2
+		// wide_add(4, x.limbs+4, x.limbs+4, pParams->roundSalt);	// Salt goes in at limbs 5 and 4
+		// wide_add(2, x.limbs+6, x.limbs+6, chainHash);	// chainHash at limbs 7 and 6
+
+		uint64_t mask = (1ull << 32) - 1;
+		x.limbs[7] = (uint32_t)(chainHash & (mask << 32));
+		x.limbs[6] = (uint32_t)(chainHash & mask);
+		x.limbs[5] = (uint32_t)(pParams->roundSalt & (mask << 32));
+		x.limbs[4] = (uint32_t)(pParams->roundSalt & mask);
+		x.limbs[3] = (uint32_t)(pParams->roundId & (mask << 32));
+		x.limbs[2] = (uint32_t)(pParams->roundId & mask);
+		x.limbs[1] = 0;
+		x.limbs[0] = 0;
 
 		return x;
 	}
@@ -194,7 +247,8 @@ namespace bitecoin{
 		unsigned nIndices,
 		std::vector<uint32_t> idxbanks[2],
 		unsigned &besti,
-		unsigned &bestj 
+		unsigned &bestj,
+		unsigned relevantLimb
 		//,std::shared_ptr<ILog> log
 	){
 		std::vector<uint32_t> pointbanks[2];
@@ -213,7 +267,7 @@ namespace bitecoin{
 					PoolHashStep(point, pParams);
 				}
 
-				pointbanks[currbank][i] = point.limbs[7];
+				pointbanks[currbank][i] = point.limbs[relevantLimb];
 			}
 		}
 

@@ -111,6 +111,22 @@ uint32_t wide_add(unsigned n, uint32_t *res, const uint32_t *a, uint64_t b)
 	return carry;
 }
 
+
+/*! Add together two n-limb numbers, returning the carry limb.
+	\note the output can also be one of the inputs
+*/
+uint32_t wide_sub(unsigned n, uint32_t *res, const uint32_t *a, const uint32_t *b)
+{
+	uint64_t borrow=0;
+	for(unsigned i=0;i<n;i++){
+		uint64_t tmp=uint64_t(a[i])-b[i]-borrow;
+		res[i]=uint32_t(tmp&0xFFFFFFFFULL);
+		borrow=tmp>>63;
+	}
+	return borrow;
+}
+
+
 /*! Multiply two n-limb numbers to produce a 2n-limb result
 	\note All the integers must be distinct, the output cannot overlap the input */
 void wide_mul(unsigned n, uint32_t *res_hi, uint32_t *res_lo, const uint32_t *a, const uint32_t *b)

@@ -85,9 +85,9 @@ public:
 				beginRound->c[0]=4294964621;//0x0baddeed;//0xd58065ff;//4294964621;
 				beginRound->c[1]=4294967295;//0x1337feed;//0xabbb1275;//4294967295;
 				beginRound->c[2]=3418534911;//0x600ddead;//0xc224d8ce;//3418534911;
-				beginRound->c[3]=0x10000000;//2138916474;//0xc0debeef;//0xb85422a0;//2138916474;
+				beginRound->c[3]=2138916474;//0xc0debeef;//0xb85422a0;//2138916474;
 				// Again exchange might choose differently
-				beginRound->hashSteps= 10;//16+rand()%16;
+				beginRound->hashSteps= 23;//16+rand()%16;
 
 				Log(Log_Verbose, "Sending chain data.\n");
 				SendPacket(beginRound);

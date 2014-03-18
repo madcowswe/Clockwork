@@ -18,6 +18,7 @@
 //#include "Clockwork.hpp"
 
 #define HR2BANKED
+//#define HR2BANKED_DEGEN
 //#define HRkBANKED
 //#define HRCUDA
 
@@ -99,6 +100,7 @@ public:
 			Log(Log_Debug, "Trial %d.", nTrials);
 
 			bigint_t point_preload = PoolHashPreload(roundInfo.get());
+			//bigint_t point_preload = PoolHashPreload_Nonbroken(roundInfo.get());
 
 			// //std::vector<uint32_t> indices(roundInfo->maxIndices);
 			// std::vector<uint32_t> indices(2);
@@ -130,7 +132,31 @@ public:
 			}
 
 			unsigned besti, bestj;
-			HashReference2Banked(roundInfo.get(), point_preload, N, idxbanks, besti, bestj);
+			HashReference2Banked(roundInfo.get(), point_preload, N, idxbanks, besti, bestj, 7);
+
+			uint32_t bestidx[2] = {idxbanks[0][bestj], idxbanks[1][besti]};
+			bigint_t proof=HashReferencewPreload(roundInfo.get(), point_preload, 2, bestidx);//, m_log);
+
+			unsigned k = 2;
+#endif
+#ifdef HR2SINGLEBANK
+			//TODO: Find golden diff using standard
+#endif
+#ifdef HR2BANKED_DEGEN
+
+			unsigned N = 10000;
+			std::vector<uint32_t> idxbanks[2];
+			idxbanks[0].reserve(N);
+			idxbanks[1].reserve(N);
+
+			for (unsigned i = 0; i < N; ++i)
+			{
+				idxbanks[0][i] = rand()/2;
+				idxbanks[1][i] = idxbanks[0][i] + 0x94632009;
+			}
+
+			unsigned besti, bestj;
+			HashReference2Banked(roundInfo.get(), point_preload, N, idxbanks, besti, bestj, 6);
 
 			uint32_t bestidx[2] = {idxbanks[0][bestj], idxbanks[1][besti]};
 			bigint_t proof=HashReferencewPreload(roundInfo.get(), point_preload, 2, bestidx);//, m_log);
