@@ -175,7 +175,7 @@ public:
 			Log(Log_Debug, "Trial %d.", nTrials);
 
 #ifdef DIFFTHINGY
-			unsigned diff = 0x94632009; //FROM OSKAR
+			unsigned diff = GoldenDiff; //FROM OSKAR
 			unsigned N = 10000;
 
 			std::vector<uint32_t> indices(roundInfo->maxIndices);
@@ -242,7 +242,7 @@ public:
 						assert(false);
 
 					//Check indicies are distinct, if so, skip
-					if (idx_mpoint_bank[i].lower_index == idx_mpoint_bank[j].lower_index)
+					if (idx_mpoint_bank[i].lower_index == idx_mpoint_bank[j].lower_index || idx_mpoint_bank[i].lower_index + diff == idx_mpoint_bank[j].lower_index || idx_mpoint_bank[j].lower_index + diff == idx_mpoint_bank[i].lower_index)
 						continue;
 
 					currentValue.lower = idx_mpoint_bank[i].lower ^ idx_mpoint_bank[j].lower;
