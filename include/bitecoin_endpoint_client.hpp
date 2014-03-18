@@ -174,8 +174,6 @@ public:
 			
 			Log(Log_Debug, "Trial %d.", nTrials);
 
-
-
 #ifdef DIFFTHINGY
 			unsigned diff = 0x94632009; //FROM OSKAR
 			unsigned N = 10000;
@@ -218,7 +216,7 @@ public:
 
 			//XOR point pair to make meta-point and put in bank
 			std::vector<metapointBank> idx_mpoint_bank;
-			idx_mpoint_bank.reserve(N*N);
+			idx_mpoint_bank.reserve(N);
 			for (unsigned i = 0; i < N; ++i)
 			{
 				//for (unsigned j = 0; j < N; ++j)
@@ -234,7 +232,7 @@ public:
 			DoubleMSB currentMin = { -1, -1 };
 			DoubleMSB currentValue;
 
-			for (unsigned i = 0; i < N*N; ++i)
+			for (unsigned i = 0; i < N; ++i)
 			{
 				for (unsigned j = 0; j < i - 1; ++j)
 				{
