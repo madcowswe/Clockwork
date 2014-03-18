@@ -127,14 +127,24 @@ public:
 
 			uint64_t point64 = ((uint64_t)point.limbs[7] << 32) + point.limbs[6];
 			pointidxbank[i] = std::make_pair(point64, curridx);
+
 		}
 
 		std::sort(pointidxbank.begin(), pointidxbank.end());
 
 		uint32_t GoldenDiff = 0;
 		uint64_t bestdistance = -1;
+		unsigned dbgcnt = 0;
 		for (unsigned i = 0; i < N-1u; i++)
 		{
+			uint32_t aidx = pointidxbank[i].second;
+			uint32_t bidx = pointidxbank[i+1].second;
+			if (aidx == bidx)
+			{
+				dbgcnt++;
+				continue;
+			}
+
 			uint64_t a = pointidxbank[i].first;
 			uint64_t b = pointidxbank[i+1].first;
 			uint64_t currabsdiff;
@@ -146,17 +156,17 @@ public:
 			if (currabsdiff < bestdistance)
 			{
 				bestdistance = currabsdiff;
-				uint32_t aidx = pointidxbank[i].second;
-				uint32_t bidx = pointidxbank[i+1].second;
 				if (aidx > bidx)
 					GoldenDiff = aidx - bidx;
 				else
 					GoldenDiff = bidx - aidx;
 			}
 
+
+
 		}
 
-		Log(Log_Verbose, "Best distance 0x%016x\t GoldenDiff %08x", bestdistance, GoldenDiff);
+		Log(Log_Verbose, "Best distance 0x%016x\t GoldenDiff %08x. Skipped %u identical.", bestdistance, GoldenDiff, dbgcnt);
 		
 		unsigned nTrials=0;
 		while(1){
@@ -165,18 +175,6 @@ public:
 			Log(Log_Debug, "Trial %d.", nTrials);
 
 
-
-			// //std::vector<uint32_t> indices(roundInfo->maxIndices);
-			// std::vector<uint32_t> indices(2);
-			// uint32_t curr=0;
-			// // for(unsigned j=0;j<indices.size();j++){
-			// // 	curr=curr+1+(rand()%10);
-			// // 	indices[j]=curr;
-			// // }
-			// for(unsigned j=0;j<indices.size();j++){
-			// 	curr+=(rand()/2);
-			// 	indices[j]=curr;
-			// }
 
 #ifdef DIFFTHINGY
 			unsigned diff = 0x94632009; //FROM OSKAR
@@ -217,7 +215,7 @@ public:
 					pointbanks[currbank][i].lower = point.limbs[6];
 				}
 			}
-			
+
 			//XOR point pair to make meta-point and put in bank
 			std::vector<metapointBank> idx_mpoint_bank;
 			idx_mpoint_bank.reserve(N*N);
@@ -225,9 +223,9 @@ public:
 			{
 				//for (unsigned j = 0; j < N; ++j)
 				//{
-					idx_mpoint_bank[i].lower_index = idxbanks[0][i];
-					idx_mpoint_bank[i].lower = pointbanks[1][i].lower ^ pointbanks[0][i].lower;
-					idx_mpoint_bank[i].upper = pointbanks[1][i].upper ^ pointbanks[0][i].upper;
+				idx_mpoint_bank[i].lower_index = idxbanks[0][i];
+				idx_mpoint_bank[i].lower = pointbanks[1][i].lower ^ pointbanks[0][i].lower;
+				idx_mpoint_bank[i].upper = pointbanks[1][i].upper ^ pointbanks[0][i].upper;
 				//}
 			}
 
@@ -238,18 +236,18 @@ public:
 
 			for (unsigned i = 0; i < N*N; ++i)
 			{
-				for (unsigned j = 0; j < i-1; ++j)
+				for (unsigned j = 0; j < i - 1; ++j)
 				{
 					if (i == j)
 						assert(false);
-					
+
 					//Check indicies are distinct, if so, carry on
 					if (idx_mpoint_bank[i].lower_index == idx_mpoint_bank[j].lower_index)
 						continue;
 
 					currentValue.lower = idx_mpoint_bank[i].lower ^ idx_mpoint_bank[j].lower;
 					currentValue.upper = idx_mpoint_bank[i].upper ^ idx_mpoint_bank[j].upper;
-					
+
 					if (currentValue.upper < currentMin.upper || (currentValue.upper == currentMin.upper && currentValue.lower < currentMin.lower))
 					{
 						bestIndex = idx_mpoint_bank[i].lower_index;
@@ -259,13 +257,14 @@ public:
 				}
 			}
 
-			uint32_t bestidx[2] = { idxbanks[0][bestIndex], idxbanks[1][bestIndex+diff] };
+			uint32_t bestidx[2] = { idxbanks[0][bestIndex], idxbanks[1][bestIndex + diff] };
 			bigint_t proof = HashReferencewPreload(roundInfo.get(), point_preload, 2, bestidx);
 
 			unsigned k = 2;
 
 
 #endif
+
 
 #ifdef HR2BANKED
 
@@ -540,3 +539,4 @@ public:
 }; // bitecoin
 
 #endif
+
