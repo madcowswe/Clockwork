@@ -177,19 +177,21 @@ public:
 #ifdef DIFFTHINGY
 			unsigned diff = 0x94632009; //FROM OSKAR
 			unsigned N = 10000;
+
 			std::vector<uint32_t> indices(roundInfo->maxIndices);
-			std::vector<uint32_t> idxbanks[2];
-			//Generate first indicies
+			std::vector<uint32_t> idxbanks;
+			idxbanks.resize(N);
+
 			for (unsigned i = 0; i < N; ++i)
 			{
-				idxbanks[0][i] = rand() / 2;
+				idxbanks[i] = rand() / 2;
 			}
 			//Add golden diff
-			for (unsigned i = 0; i < N; ++i)
-			{
-				//TODO: realise the maximum size of diff, and allow lower bank to generate upto INTMAX-max(diff)
-				idxbanks[1][i] = idxbanks[0][i] + diff;
-			}
+			//for (unsigned i = 0; i < N; ++i)
+			//{
+			//	//TODO: realise the maximum size of diff, and allow lower bank to generate upto INTMAX-max(diff)
+			//	idxbanks[1][i] = idxbanks[0][i] + diff;
+			//}
 
 			//Generate point for each index pair
 			std::vector<DoubleMSB> pointbanks[2];
@@ -201,7 +203,7 @@ public:
 				for (unsigned i = 0; i < N; ++i)
 				{
 					bigint_t point = point_preload;
-					point.limbs[0] = idxbanks[currbank][i];
+					point.limbs[0] = idxbanks[i] + currbank*diff;
 
 					// Now step forward by the number specified by the server
 					for (unsigned j = 0; j<roundInfo.get()->hashSteps; j++){
@@ -221,25 +223,25 @@ public:
 			{
 				//for (unsigned j = 0; j < N; ++j)
 				//{
-				idx_mpoint_bank[i].lower_index = idxbanks[0][i];
+				idx_mpoint_bank[i].lower_index = idxbanks[i];
 				idx_mpoint_bank[i].lower = pointbanks[1][i].lower ^ pointbanks[0][i].lower;
 				idx_mpoint_bank[i].upper = pointbanks[1][i].upper ^ pointbanks[0][i].upper;
 				//}
 			}
 
 			//XOR meta-points and find minimum
-			uint32_t bestIndex;
+			uint32_t bestIndex[2];
 			DoubleMSB currentMin = { -1, -1 };
 			DoubleMSB currentValue;
 
 			for (unsigned i = 0; i < N; ++i)
 			{
-				for (unsigned j = 0; j < i - 1; ++j)
+				for (int j = 0; j < (int) (i - 1); ++j)
 				{
 					if (i == j)
 						assert(false);
 
-					//Check indicies are distinct, if so, carry on
+					//Check indicies are distinct, if so, skip
 					if (idx_mpoint_bank[i].lower_index == idx_mpoint_bank[j].lower_index)
 						continue;
 
@@ -247,18 +249,21 @@ public:
 					currentValue.upper = idx_mpoint_bank[i].upper ^ idx_mpoint_bank[j].upper;
 
 					if (currentValue.upper < currentMin.upper || (currentValue.upper == currentMin.upper && currentValue.lower < currentMin.lower))
-					{
-						bestIndex = idx_mpoint_bank[i].lower_index;
+					{						
+						bestIndex[0] = idx_mpoint_bank[i].lower_index;
+						bestIndex[1] = idx_mpoint_bank[j].lower_index;
 						currentMin.lower = currentValue.lower;
 						currentMin.upper = currentValue.upper;
 					}
 				}
 			}
 
-			uint32_t bestidx[2] = { idxbanks[0][bestIndex], idxbanks[1][bestIndex + diff] };
-			bigint_t proof = HashReferencewPreload(roundInfo.get(), point_preload, 2, bestidx);
+			uint32_t bestidx[4] = { idxbanks[bestIndex[0]], idxbanks[bestIndex[0]] + diff, idxbanks[bestIndex[1]], idxbanks[bestIndex[1]] + diff};
+			//Sort bestidx
+			bigint_t proof = HashReferencewPreload(roundInfo.get(), point_preload, 4, bestidx);
 
-			unsigned k = 2;
+			//Number of banks
+			unsigned k = 4;
 
 
 #endif

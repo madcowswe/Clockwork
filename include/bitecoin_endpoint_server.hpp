@@ -73,6 +73,9 @@ public:
 			
 			while(1){
 				Log(Log_Info, "Starting round %llu.", roundId);
+
+				
+				
 				
 				auto beginRound=std::make_shared<Packet_ServerBeginRound>();
 				beginRound->roundId=roundId;
@@ -82,10 +85,10 @@ public:
 				memset(beginRound->c, 0, BIGINT_LENGTH/2);
 				// These are just arbitrary values. The real exchange may choose
 				// different ones
-				beginRound->c[0]=4294964621;//0x0baddeed;//0xd58065ff;//4294964621;
-				beginRound->c[1]=4294967295;//0x1337feed;//0xabbb1275;//4294967295;
-				beginRound->c[2]=3418534911;//0x600ddead;//0xc224d8ce;//3418534911;
-				beginRound->c[3]=2138916474;//0xc0debeef;//0xb85422a0;//2138916474;
+				beginRound->c[0] = 0xfffff58d;//0xfffff58d;//0x0baddeed;//0xd58065ff;//4294964621;
+				beginRound->c[1] = 0xffffffff;//4294967295;//0x1337feed;//0xabbb1275;//4294967295;
+				beginRound->c[2] = 0xcbc2b3ff;// 3418534911;//0x600ddead;//0xc224d8ce;//3418534911;
+				beginRound->c[3] = 0x7f7d467a;// 2138916474;//0xc0debeef;//0xb85422a0;//2138916474;
 				// Again exchange might choose differently
 				beginRound->hashSteps= 23;//16+rand()%16;
 
