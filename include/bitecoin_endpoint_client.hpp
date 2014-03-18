@@ -202,8 +202,8 @@ public:
 
 				//XOR point pair to make meta-point and put in bank
 				idx_mpoint_bank[i].lower_index = idxbanks[i];
-				idx_mpoint_bank[i].lower = pointbanks[1][i].lower ^ pointbanks[0][i].lower;
-				idx_mpoint_bank[i].upper = pointbanks[1][i].upper ^ pointbanks[0][i].upper;
+				idx_mpoint_bank[i].value = pointbanks[1][i] ^ pointbanks[0][i];
+
 			}
 
 			
@@ -223,15 +223,15 @@ public:
 					if (idx_mpoint_bank[i].lower_index == idx_mpoint_bank[j].lower_index || idx_mpoint_bank[i].lower_index + diff == idx_mpoint_bank[j].lower_index || idx_mpoint_bank[j].lower_index + diff == idx_mpoint_bank[i].lower_index)
 						continue;
 
-					currentValue.lower = idx_mpoint_bank[i].lower ^ idx_mpoint_bank[j].lower;
-					currentValue.upper = idx_mpoint_bank[i].upper ^ idx_mpoint_bank[j].upper;
+					currentValue = idx_mpoint_bank[i].value ^ idx_mpoint_bank[j].value;
+					currentValue = idx_mpoint_bank[i].value ^ idx_mpoint_bank[j].value;
 
-					if (currentValue.upper < currentMin.upper || (currentValue.upper == currentMin.upper && currentValue.lower < currentMin.lower))
+					if (currentValue < currentMin || (currentValue == currentMin && currentValue < currentMin))
 					{						
 						bestIndex[0] = idx_mpoint_bank[i].lower_index;
 						bestIndex[1] = idx_mpoint_bank[j].lower_index;
-						currentMin.lower = currentValue.lower;
-						currentMin.upper = currentValue.upper;
+						currentMin = currentValue;
+						currentMin = currentValue;
 					}
 				}
 			}
