@@ -119,8 +119,17 @@ public:
 
 		uint32_t GoldenDiff = 0;
 		uint64_t bestdistance = -1;
+		unsigned dbgcnt = 0;
 		for (unsigned i = 0; i < N-1u; i++)
 		{
+			uint32_t aidx = pointidxbank[i].second;
+			uint32_t bidx = pointidxbank[i+1].second;
+			if (aidx == bidx)
+			{
+				dbgcnt++;
+				continue;
+			}
+
 			uint64_t a = pointidxbank[i].first;
 			uint64_t b = pointidxbank[i+1].first;
 			uint64_t currabsdiff;
@@ -132,8 +141,6 @@ public:
 			if (currabsdiff < bestdistance)
 			{
 				bestdistance = currabsdiff;
-				uint32_t aidx = pointidxbank[i].second;
-				uint32_t bidx = pointidxbank[i+1].second;
 				if (aidx > bidx)
 					GoldenDiff = aidx - bidx;
 				else
@@ -142,7 +149,7 @@ public:
 
 		}
 
-		Log(Log_Verbose, "Best distance 0x%016x\t GoldenDiff %08x", bestdistance, GoldenDiff);
+		Log(Log_Verbose, "Best distance 0x%016x\t GoldenDiff %08x. Skipped %u identical.", bestdistance, GoldenDiff, dbgcnt);
 		
 		unsigned nTrials=0;
 		while(1){
