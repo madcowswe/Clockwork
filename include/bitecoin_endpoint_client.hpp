@@ -154,9 +154,6 @@ public:
 				else
 					GoldenDiff = bidx - aidx;
 			}
-
-
-
 		}
 
 		Log(Log_Verbose, "Best distance 0x%016x\t GoldenDiff %08x. Skipped %u identical.", bestdistance, GoldenDiff, dbgcnt);
@@ -203,8 +200,6 @@ public:
 				//XOR point pair to make meta-point and put in bank
 				pointidxbank[i].first = pointbanks[1][i] ^ pointbanks[0][i];
 				pointidxbank[i].second = idxbanks[i];
-				//idx_mpoint_bank[i].lower_index = idxbanks[i];
-				//idx_mpoint_bank[i].value = pointbanks[1][i] ^ pointbanks[0][i];
 
 			}
 
@@ -237,7 +232,7 @@ public:
 				}
 			}
 
-			uint32_t bestidx[4] = { idxbanks[bestIndex[0]], idxbanks[bestIndex[0]] + diff, idxbanks[bestIndex[1]], idxbanks[bestIndex[1]] + diff};
+			uint32_t bestidx[4] = { bestIndex[0], bestIndex[0] + diff, bestIndex[1], bestIndex[1] + diff};
 
 			std::sort(&bestidx[0], &bestidx[0] + 4);
 
