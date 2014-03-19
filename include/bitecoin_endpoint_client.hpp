@@ -19,7 +19,7 @@
 
 #include <random>
 
-//#define USECUDA
+#define USECUDA
 
 #ifdef USECUDA
 #include <cuda_runtime.h>

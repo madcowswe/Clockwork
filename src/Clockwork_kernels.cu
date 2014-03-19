@@ -9,6 +9,42 @@
 #include "device_launch_parameters.h"
 #include "device_functions.h"
 
+#include "bitecoin_protocol.hpp"
+#include <vector>
+#include <thrust/device_vector.h>
+#include <thrust/transform.h>
+#include <wide_int.h>
+
+
+
+//std::vector< std::pair<wide_pair, std::vector<uint32_t>> > 
+
+
+namespace bitecoin{
+
+	//TODO: zip into vector of pairs in place
+	std::vector<wide_as_pair> genpoints_on_GPU (
+		const Packet_ServerBeginRound *pParams,
+		wide_as_pair point_preload,
+		std::vector<uint32_t> indexbank
+	){
+
+		thrust::device_vector<uint32_t> indexbank_GPU = indexbank;
+		thrust::device_vector<wide_as_pair> output_GPU(indexbank.size());
+
+		auto genpoint = [](uint32_t idx){
+			return thrust::make_pair(thrust::make_pair(idx, idx), thrust::make_pair(idx,idx));
+		};
+
+		thrust::transform(indexbank_GPU.begin(), indexbank_GPU.end(), output_GPU.begin(), genpoint);
+
+	}
+
+}
+
+
+/////////////////////////////////////////////////////////////////////////////////////
+
 const int N = 7;
 const int blocksize = 7;
 
