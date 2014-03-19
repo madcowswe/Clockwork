@@ -197,8 +197,13 @@ namespace bitecoin{
 		
 		for(unsigned i=0;i<nIndices;i++){
 			if(i>0){
-				if(pIndices[i-1] >= pIndices[i])
+				if(pIndices[i-1] >= pIndices[i]){
+					for (unsigned j = 0; j < nIndices; j++)
+					{
+						fprintf(stderr, "Indicies were 0x%08x\n", pIndices[j]);
+					}
 					throw std::invalid_argument("HashReference - Indices are not in monotonically increasing order.");
+				}
 			}
 			
 			// Calculate the hash for this specific point
@@ -217,6 +222,22 @@ namespace bitecoin{
 		}
 		
 		return acc;
+	}
+
+	bigint_t pointFromIdx(
+		const Packet_ServerBeginRound *pParams,
+		bigint_t point_preload,
+		uint32_t index
+	){
+		bigint_t point = point_preload;
+		point.limbs[0] = index;
+
+		// Now step forward by the number specified by the server
+		for (unsigned j = 0; j<pParams->hashSteps; j++){
+			PoolHashStep(point, pParams);
+		}
+
+		return point;
 	}
 
 	void pointsFromIdx(

@@ -19,8 +19,9 @@
 
 #include <random>
 
+#define SECONDSORT
 //#define HR2BANKED
-#define POSTDIFF2BRUTE
+//#define POSTDIFF2BRUTE
 //#define HR2BANKED_DEGEN
 //#define HRkBANKED
 //#define HRCUDA
@@ -94,19 +95,15 @@ public:
 		double tFinish=request->timeStampReceiveBids*1e-9 + skewEstimate - tSafetyMargin;
 		
 		Log(Log_Verbose, "MakeBid - start, total period=%lg.", period);
-		
-		/*
-			We will use this to track the best solution we have created so far.
-		*/
-		std::vector<uint32_t> bestSolution(roundInfo->maxIndices);
-		bigint_t bestProof;
-		wide_ones(BIGINT_WORDS, bestProof.limbs);
 
 		bigint_t point_preload = PoolHashPreload(roundInfo.get());
 		//bigint_t point_preload = PoolHashPreload_Nonbroken(roundInfo.get());
 
-		unsigned N = 1<<(16+0);
-		std::vector<std::pair<uint64_t, uint32_t>> pointidxbank(N);
+
+		//TODO: weak Seen set & strong GoldenDiff cache
+
+		unsigned Ngd = 1<<(16+1);
+		std::vector<std::pair<uint64_t, uint32_t>> pointidxbank(Ngd);
 
 		std::random_device seeder;
 		std::minstd_rand rand_engine(seeder());
@@ -116,7 +113,7 @@ public:
 			return uniform_distr(rand_engine);
 		};
 
-		for (unsigned i = 0; i < N; i++)
+		for (unsigned i = 0; i < Ngd; i++)
 		{
 			uint32_t curridx = fastrand();
 			bigint_t point = point_preload;
@@ -137,7 +134,7 @@ public:
 		uint64_t bestdistance = -1;
 		unsigned skipcount = 0;
 		unsigned overloadcount = 0;
-		for (unsigned i = 0; i < N-1u; i++)
+		for (unsigned i = 0; i < Ngd-1u; i++)
 		{
 			uint32_t aidx = pointidxbank[i].second;
 			uint32_t bidx = pointidxbank[i+1].second;
@@ -170,14 +167,145 @@ public:
 			}
 		}
 
+		//quick and dirty 2 idx solution in case we run out of time
+		uint32_t bsInitVSsucks[] = {0, GoldenDiff};
+		std::vector<uint32_t> bestSolution(bsInitVSsucks, bsInitVSsucks+2); //= {0, GoldenDiff};
+		bigint_t pointa = pointFromIdx(roundInfo.get(), point_preload, 0);
+		bigint_t pointb = pointFromIdx(roundInfo.get(), point_preload, GoldenDiff);
+		bigint_t bestProof;
+		wide_xor(8, bestProof.limbs, pointa.limbs, pointb.limbs);
+		unsigned k = 2;
+
 		Log(Log_Verbose, "Best distance 0x%016x\t GoldenDiff 0x%08x. Skipped %u identical, Overload %u.", bestdistance, GoldenDiff, skipcount, overloadcount);
 		
 		unsigned nTrials=0;
+		double t=now()*1e-9;	// Work out where we are against the deadline
+		double timeBudget=tFinish-t;
+		static double hashrate = 1<<16;
+		double timeBudgetInital = timeBudget;
+
 		while(1){
+			unsigned Nss = 0.8 * std::max(timeBudget,0.) * hashrate;
+			if (Nss == 0)
+			{
+				break;
+			}
 			++nTrials;
+
+			double tic = now()*1e-9;
 			
 			Log(Log_Debug, "Trial %d.", nTrials);
 
+#ifdef SECONDSORT
+
+			unsigned diff = GoldenDiff;//0x94632009;
+			std::vector<std::pair<std::pair<uint64_t, uint64_t>, uint32_t>> metapointidxbank;
+			metapointidxbank.reserve(Nss);
+
+#ifdef USE_THIS_IF_WE_KEEP_WORD_5_FROM_GOLDEN_DIFF_FIND
+			auto addIfMSWClear = [&](unsigned i, uint32_t idxtoadd){
+				bigint_t point = point_preload;
+				point.limbs[0] = idxtoadd;
+
+				for(unsigned j=0;j<roundInfo->hashSteps;j++){
+					PoolHashStep(point, roundInfo.get());
+				}
+
+				bigint_t metapoint;
+				wide_xor(8, metapoint.limbs, pointidxbank[i]
+			};
+
+			for (int i = 0; i < N && metapointidxbank.size() <= N-2; i++)
+			{
+				int64_t overidx = (int64_t)pointidxbank[i].second + (int64_t)diff;
+				if(overidx < (1ll << 32)){
+					addIfMSWClear(i, (uint32_t)overidx);
+				}
+
+				int64_t underidx = (int64_t)pointidxbank[i].second - (int64_t)diff;
+				if((int64_t)pointidxbank[i].second - (int64_t)diff >= 0){
+					addIfMSWClear(i, (uint32_t)underidx);
+				}
+			}
+#endif
+
+			std::uniform_int_distribution<uint32_t> uniform_baserange(0u, (uint32_t)(-1) - diff);
+			unsigned failcount = 0;
+			while (metapointidxbank.size() < Nss)
+			{
+				uint32_t idx1 = uniform_baserange(rand_engine);
+				bigint_t point1 = pointFromIdx(roundInfo.get(), point_preload, idx1);
+
+				uint32_t idx2 = idx1 + diff;
+				bigint_t point2 = pointFromIdx(roundInfo.get(), point_preload, idx2);
+
+				bigint_t metapoint;
+				wide_xor(8, metapoint.limbs, point1.limbs, point2.limbs);
+
+				if (metapoint.limbs[7] == 0u || failcount >= 0.3*Nss)
+				{
+					metapointidxbank.push_back(std::make_pair(
+						std::make_pair(
+						((uint64_t)metapoint.limbs[6] << 32) + metapoint.limbs[5],
+						((uint64_t)metapoint.limbs[4] << 32) + metapoint.limbs[3]),
+						idx1) );
+				} else {
+					failcount++;
+				}
+			}
+
+			if (failcount > 0.20*Nss){
+				Log(Log_Verbose, "We failed to clear MSW %d times when filling Nss=%d", failcount, Nss);
+				if (failcount >= 0.3*Nss){
+					Log(Log_Verbose, "Second pass: Not enough MSW clear: Override!!!!");
+				}
+			}
+
+			std::sort(metapointidxbank.begin(), metapointidxbank.end());
+
+			std::pair<uint64_t, uint64_t> bestmmpoint = std::make_pair(-1ull, -1ull);
+			std::pair<uint32_t, uint32_t> besti;
+			unsigned skipcount = 0;
+			unsigned overloadcount = 0;
+			for (unsigned i = 0; i < Nss-1u; i++)
+			{
+				uint32_t aidx = metapointidxbank[i].second;
+				uint32_t bidx = metapointidxbank[i+1].second;
+				if (aidx == bidx || aidx == bidx + diff || aidx + diff == bidx)
+				{
+					skipcount++;
+					continue;
+				}
+
+				std::pair<uint64_t, uint64_t> a = metapointidxbank[i].first;
+				std::pair<uint64_t, uint64_t> b = metapointidxbank[i+1].first;
+				std::pair<uint64_t, uint64_t> currmmpoint = pairwise_xor(a,b);
+
+				if (currmmpoint <= bestmmpoint)
+				{
+					if (currmmpoint == bestmmpoint)
+					{
+						overloadcount++;
+					} else {
+						bestmmpoint = currmmpoint;
+						besti = std::make_pair(aidx, bidx);
+					}
+				}
+			}
+
+			Log(Log_Debug, "Second pass: Skipped %u inclusive idx, Overload %u", skipcount, overloadcount);
+
+
+			uint32_t bestidx[4] = { besti.first, besti.first + diff, besti.second, besti.second + diff};
+			std::sort(bestidx, bestidx+4);
+			
+			bigint_t proof = HashReferencewPreload(roundInfo.get(), point_preload, 4, bestidx);
+
+			//Number of idx
+			k = 4;
+
+
+#endif
 #ifdef POSTDIFF2BRUTE
 			unsigned diff = GoldenDiff;//0x94632009;//GoldenDiff;
 			unsigned N = 10000;
@@ -197,7 +325,7 @@ public:
 			{
 				
 				//HACK, use a proper uniform distr
-				while((idxbank[i] = fastrand()) > (unsigned)(-1) - diff)
+				while((idxbank[i] = fastrand()) > (uint32_t)(-1) - diff)
 					randoverhead++;
 
 				for (unsigned currbank = 0; currbank < 2; ++currbank)
@@ -206,7 +334,7 @@ public:
 					point.limbs[0] = idxbank[i] + currbank*diff;
 
 					// Now step forward by the number specified by the server
-					for (unsigned j = 0; j<roundInfo.get()->hashSteps; j++){
+					for (unsigned j = 0; j<roundInfo->hashSteps; j++){
 						//Needs to become 64 bit (upper 2 MSW)
 						PoolHashStep(point, roundInfo.get());
 					}
@@ -220,7 +348,7 @@ public:
 
 			}
 
-			//Log(Log_Verbose, "Randoverhead was %g\%", (double)randoverhead/N);
+			Log(Log_Debug, "Randoverhead was %g\%", (double)randoverhead/N);
 			
 			//XOR meta-points and find minimum
 			uint32_t bestIndex[2] = {0, 0}; //init to get rid of warnings
@@ -252,14 +380,10 @@ public:
 			uint32_t bestidx[4] = { bestIndex[0], bestIndex[0] + diff, bestIndex[1], bestIndex[1] + diff};
 			std::sort(bestidx, bestidx+4);
 			
-
 			bigint_t proof = HashReferencewPreload(roundInfo.get(), point_preload, 4, bestidx);
-
-			
 
 			//Number of banks
 			unsigned k = 4;
-
 
 #endif
 
@@ -421,20 +545,32 @@ public:
 			Log(Log_Debug, "    Score=%lg", score);
 			
 			if(wide_compare(BIGINT_WORDS, proof.limbs, bestProof.limbs)<0){
-				double worst=pow(2.0, BIGINT_LENGTH*8);	// This is the worst possible score
-				Log(Log_Verbose, "    Found new best, nTrials=%d, score=%lg, ratio=%lg.", nTrials, score, worst/score);
+				double leadingzeros = 256 - log(score) * 1.44269504088896340736; //log2(e)
+				Log(Log_Verbose, "    Found new best, nTrials=%d, score=%lg, leading zeros=%lg.", nTrials, score, leadingzeros);
 				std::vector<uint32_t> resvec(bestidx, bestidx+k);
 				bestSolution = resvec;
 				bestProof=proof;
 			}
 			
-			double t=now()*1e-9;	// Work out where we are against the deadline
-			double timeBudget=tFinish-t;
+			double toc=now()*1e-9;	// Work out where we are against the deadline
+			if (timeBudget >= 0.4*timeBudgetInital)
+			{
+				hashrate = Nss/(std::max(toc-tic, 0.1));
+				Log(Log_Verbose, "New hashrate %g.", hashrate);
+			}
+
+			timeBudget=tFinish-toc;
 			Log(Log_Debug, "Finish trial %d, time remaining =%lg seconds.", nTrials, timeBudget);
 			
 			if(timeBudget<=0)
 				break;	// We have run out of time, send what we have
 		}
+
+		Log(Log_Verbose, "Did %d trials in the end.", nTrials);
+
+		//Trollface
+		//wide_zero(8, bestProof.limbs);
+		//bestSolution = std::vector<uint32_t>();
 		
 		solution=bestSolution;
 		wide_copy(BIGINT_WORDS, pProof, bestProof.limbs);
@@ -478,16 +614,21 @@ public:
 				std::shared_ptr<Packet_ClientSendBid> bid=std::make_shared<Packet_ClientSendBid>();
 				
 				MakeBid(beginRound, requestBid, period, skewEstimate, bid->solution, bid->proof);
-				bid->timeSent=now();				
+				if(bid.use_count() == 0)
+					assert(false);
+				bid->timeSent=now();
 				Log(Log_Verbose, "Bid ready.");
 
 				for (unsigned i = 0; i < bid->solution.size(); ++i)
 				{
-					Log(Log_Verbose, "    Indicies were 0x%08x", bid->solution[bid->solution.size()-1-i]);
+					Log(Log_Debug, "    Indicies were 0x%08x", bid->solution[bid->solution.size()-1-i]);
 				}
 
-				Log(Log_Verbose, "    Diff is       0x%08x", bid->solution[1] - bid->solution[0]);
-				Log(Log_Verbose, "    MSW is        0x%08x", bid->proof[7]);
+				if (bid->solution.size() >= 2)
+				{
+					Log(Log_Debug, "    Diff is       0x%08x", bid->solution[1] - bid->solution[0]);
+				}
+				Log(Log_Debug, "    MSW is        0x%08x", bid->proof[7]);
 
 				SendPacket(bid);
 				Log(Log_Verbose, "Bid sent.");
@@ -495,10 +636,14 @@ public:
 				Log(Log_Verbose, "Waiting for results.");
 				auto results=RecvPacket<Packet_ServerCompleteRound>();
 				Log(Log_Info, "Got round results.");
+
+				static unsigned overduectr = 0;
 				
 				for(unsigned i=0;i<results->submissions.size();i++){
 					double taken=requestBid->timeStampReceiveBids*1e-9 - results->submissions[i].timeRecv*1e-9;
 					bool overDue=requestBid->timeStampReceiveBids < results->submissions[i].timeRecv;
+					if (overDue && results->submissions[i].clientId.compare(m_clientId) == 0)
+						overduectr++;
 					Log(Log_Info, "  %16s : %.6lg, %lg%s", results->submissions[i].clientId.c_str(),
 							wide_as_double(BIGINT_WORDS, results->submissions[i].proof), taken,
 							overDue?" OVERDUE":""
@@ -507,6 +652,8 @@ public:
 						m_knownCoins[results->submissions[i].clientId]=0;
 					}
 				}
+
+				Log(Log_Info, "We have been overdue %d times.", overduectr);
 				
 				if(results->winner.clientId==m_clientId){
 					Log(Log_Info, "");
@@ -523,6 +670,7 @@ public:
 					Log(Log_Info, "  %16s : %6d, %.6lf", it->first.c_str(), it->second, it->second/(double)m_knownRounds);
 					++it;
 				}
+
 				
 				Log(Log_Verbose, "");
 			}

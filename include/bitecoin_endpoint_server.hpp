@@ -95,11 +95,12 @@ public:
 				auto requestBid=std::make_shared<Packet_ServerRequestBid>();
 
 				double roundLength=(rand()+1.0)/RAND_MAX;
-				roundLength=-log(roundLength)*2.75+0.25;
+				//roundLength=-log(roundLength)*2.75+0.25;
+				roundLength=-log(roundLength)*5+0.25;
 				roundLength=std::max(0.25, std::min(60.0, roundLength));
 
 				//Testing override
-				roundLength = 30;
+				//roundLength = 10;//30;
 				
 				timestamp_t start=now();
 				timestamp_t finish=uint64_t(start+roundLength*1e9);
