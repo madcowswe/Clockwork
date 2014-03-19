@@ -265,6 +265,7 @@ public:
 
 			std::pair<uint64_t, uint64_t> bestmmpoint = std::make_pair(-1ull, -1ull);
 			std::pair<uint32_t, uint32_t> besti;
+			bool bestivalid = 0;
 			unsigned skipcount = 0;
 			unsigned overloadcount = 0;
 			for (unsigned i = 0; i < Nss-1u; i++)
@@ -289,12 +290,17 @@ public:
 					} else {
 						bestmmpoint = currmmpoint;
 						besti = std::make_pair(aidx, bidx);
+						bestivalid = 1;
 					}
 				}
 			}
 
 			Log(Log_Debug, "Second pass: Skipped %u inclusive idx, Overload %u", skipcount, overloadcount);
 
+			if (!bestivalid)
+			{
+				break;
+			}
 
 			uint32_t bestidx[4] = { besti.first, besti.first + diff, besti.second, besti.second + diff};
 			std::sort(bestidx, bestidx+4);
