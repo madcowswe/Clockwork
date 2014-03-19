@@ -165,7 +165,7 @@ public:
 			Log(Log_Debug, "Trial %d.", nTrials);
 
 #ifdef DIFFTHINGY
-			unsigned diff = 0x94632009; //FROM OSKAR
+			unsigned diff = GoldenDiff; //FROM OSKAR
 			//unsigned N = 10000;
 
 			std::vector<uint32_t> indices(roundInfo->maxIndices);
