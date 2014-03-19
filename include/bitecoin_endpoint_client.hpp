@@ -316,15 +316,15 @@ public:
 
 #ifdef GENERICSORT
 
-			//typedef
-			//	std::vector <std::pair <std::pair <
-			//	std::pair <uint64_t, uint64_t>, std::pair<uint64_t, uint64_t >>,
-			//	std::vector < uint32_t >>> pair_wide;
-
 			typedef
-				std::vector <std::pair <
-				std::pair <uint64_t, uint64_t> ,
-				std::vector < uint32_t >> > pair_wide;
+				std::vector <std::pair <std::pair <
+				std::pair <uint64_t, uint64_t>, std::pair<uint64_t, uint64_t >>,
+				std::vector<uint32_t>* >> pair_wide;
+
+			//typedef
+			//	std::vector <std::pair <
+			//	std::pair <uint64_t, uint64_t> ,
+			//	uint32_t > > pair_wide;
 
 
 			pair_wide nOrderMetapointIdxBank;
@@ -333,11 +333,20 @@ public:
 			unsigned diff = GoldenDiff;//0x94632009;
 			//std::vector<std::pair<std::pair<uint64_t, uint64_t>, uint32_t>> metapointidxbank;
 			//metapointidxbank.reserve(Nss);
-
+			//std::vector<uint32_t> baseInd;
+			//baseInd.push_back(100);
 			//Generate our indices with the golden diff
 			//Take 2 indicies and create meta point
 			std::uniform_int_distribution<uint32_t> uniform_baserange(0u, (uint32_t)(-1) - diff);
 			unsigned failcount = 0;
+
+			//for (int depth = 0; depth < 4; depth++){
+			//	for (int i = 0; i < Nss; i++)
+			//	{
+
+			//	}
+			//}
+
 			while (nOrderMetapointIdxBank.size() < Nss)
 			{
 				uint32_t idx1 = uniform_baserange(rand_engine);
@@ -349,22 +358,29 @@ public:
 				bigint_t metapoint;
 				wide_xor(8, metapoint.limbs, point1.limbs, point2.limbs);
 
-				std::vector<uint32_t> baseInd;
+				//nOrderMetapointIdxBank[nOrderMetapointIdxBank.size()-1].second.reserve(1);
 
-				baseInd.push_back(idx1);
+				std::vector<uint32_t> *baseInd = new std::vector<uint32_t>();
+				//std::vector<uint32_t> *baseInd = new std::vector<uint32_t>();
+				(*baseInd).push_back(idx1);
+				//std::vector<uint32_t> baseInd;
+				//baseInd.push_back(idx1);
+				//baseInd[0] = idx1; 
+				//baseInd.push_back( idx1);
+				//(*baseInd).push_back(idx1);
 
 				if (metapoint.limbs[7] == 0u || failcount >= 0.3*Nss)
 				{
 
 					nOrderMetapointIdxBank.push_back(
 						std::make_pair(std::make_pair(
-						//std::make_pair(
+						std::make_pair(
 						((uint64_t)metapoint.limbs[7] << 32) + metapoint.limbs[6],
-						((uint64_t)metapoint.limbs[5] << 32) + metapoint.limbs[4])/*,
-																				  std::make_pair(
-																				  ((uint64_t)metapoint.limbs[3] << 32) + metapoint.limbs[2],
-																				  ((uint64_t)metapoint.limbs[1] << 32) + metapoint.limbs[0]))*/
-																				  , baseInd));
+						((uint64_t)metapoint.limbs[5] << 32) + metapoint.limbs[4]),
+						std::make_pair(
+						((uint64_t)metapoint.limbs[3] << 32) + metapoint.limbs[2],
+						((uint64_t)metapoint.limbs[1] << 32) + metapoint.limbs[0]))
+						, baseInd));
 
 				} else {
 					failcount++;
@@ -395,20 +411,17 @@ public:
 			unsigned overloadcount = 0;
 			for (unsigned i = 0; i < Nss - 1u; i++)
 			{
-				//uint32_t aidx = nOrderMetapointIdxBank[i].second[0];
-				//uint32_t bidx = nOrderMetapointIdxBank[i + 1].second[0];
-				uint32_t aidx = nOrderMetapointIdxBank[i].second[0];
-				uint32_t bidx = nOrderMetapointIdxBank[i + 1].second[0];
+
+				uint32_t aidx = (*nOrderMetapointIdxBank[i].second)[0];
+				uint32_t bidx = (*nOrderMetapointIdxBank[i + 1].second)[0];
 				if (aidx == bidx || aidx == bidx + diff || aidx + diff == bidx)
 				{
 					skipcount++;
 					continue;
 				}
 
-				//std::pair<uint64_t, uint64_t> a = nOrderMetapointIdxBank[i].first.first;
-				//std::pair<uint64_t, uint64_t> b = nOrderMetapointIdxBank[i + 1].first.first;
-				std::pair<uint64_t, uint64_t> a = nOrderMetapointIdxBank[i].first;
-				std::pair<uint64_t, uint64_t> b = nOrderMetapointIdxBank[i + 1].first;
+				std::pair<uint64_t, uint64_t> a = nOrderMetapointIdxBank[i].first.first;
+				std::pair<uint64_t, uint64_t> b = nOrderMetapointIdxBank[i + 1].first.first;
 				std::pair<uint64_t, uint64_t> currmmpoint = pairwise_xor(a, b);
 
 				if (currmmpoint <= bestmmpoint)
@@ -425,7 +438,6 @@ public:
 			}
 
 			//And now we do meta-meta points
-
 
 			Log(Log_Debug, "Second pass: Skipped %u inclusive idx, Overload %u", skipcount, overloadcount);
 
