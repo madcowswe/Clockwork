@@ -63,6 +63,11 @@ void wide_xor(unsigned n, uint32_t *res, const uint32_t *a, const uint32_t *b)
 	}
 }
 
+template<class T1, class T2>
+std::pair<T1,T2> pairwise_xor(std::pair<T1,T2> a, std::pair<T1,T2> b){
+	return std::make_pair(a.first ^ b.first, a.second ^ b.second);
+}
+
 /*! Add together two n-limb numbers, returning the carry limb.
 	\note the output can also be one of the inputs
 */

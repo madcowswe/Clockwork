@@ -24,7 +24,7 @@ int main(int argc, char *argv[])
 	
 	try{		
 		std::string clientId=argv[1];
-		std::string minerId="David's Miner";
+		std::string minerId="Clockwork";
 		
 		// Control how much is being output.
 		// Higher numbers give you more info
