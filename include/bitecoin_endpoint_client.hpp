@@ -320,7 +320,8 @@ public:
 
 
 
-			std::vector<wide_idx_pair<1>::type > nOrderMetapointIdxBank;
+			//std::vector<wide_idx_pair<1>::type > nOrderMetapointIdxBank;
+			std::vector<wide_idx_pair> nOrderMetapointIdxBank;
 			nOrderMetapointIdxBank.reserve(Nss);
 
 			unsigned diff = GoldenDiff;//0x94632009;
@@ -333,13 +334,13 @@ public:
 			std::uniform_int_distribution<uint32_t> uniform_baserange(0u, (uint32_t)(-1) - diff);
 			unsigned failcount = 0;
 
-			//for (int depth = 0; depth < 4; depth++){
+			for (int depth = 0; depth < 4; depth++){
 
 				for (int i = 0; i < Nss; i++)
 				{
 
 				}
-			//}
+			}
 
 			while (nOrderMetapointIdxBank.size() < Nss)
 			{
@@ -365,21 +366,26 @@ public:
 					((uint64_t)metapoint.limbs[3] << 32) + metapoint.limbs[2],
 					((uint64_t)metapoint.limbs[1] << 32) + metapoint.limbs[0]);
 
+				//nOrderMetapointIdxBank.
+				
 				//wide_idx_pair<1>::type newIdxMetapoint;
 				//newIdxMetapoint.second = idxarr<1>{ idx1} ;
 				//idxarr<1> te; 
 				
-				idxarr<1> te;				
-				te.idx[0] = idx1;
+				//idxarr<1> te;				
+				//te.idx[0] = idx1;
 
-				wide_idx_pair<1>::type wip;
-				wip.first = newMetapoint; wip.second = te;
+				//wide_idx_pair<1>::type wip;
+				//wip.first = newMetapoint; wip.second = te;
 				//std::vector<uint32_t> idxs; 
 				//idxs.push_back(idx1);
-				//std::vector<uint32_t> *idxs = new std::vector<uint32_t>();
-				//(*idxs).push_back(idx1);
+				std::vector<uint32_t> *idxs = new std::vector<uint32_t>();
+				(*idxs).push_back(idx1);
 				//newIdxMetapoint = std::make_pair(newMetapoint, idxs);
 				//
+
+				wide_idx_pair wip; 
+				wip.first = newMetapoint; wip.second = idxs;
 
 				nOrderMetapointIdxBank.push_back(wip);
 
@@ -403,8 +409,8 @@ public:
 			for (unsigned i = 0; i < Nss/*nOrderMetapointIdxBank.size()*/ - 1u; i++)
 			{
 
-				uint32_t aidx = 0;// nOrderMetapointIdxBank[i].second.idx[0]; //(*nOrderMetapointIdxBank[i].second)[0];
-				uint32_t bidx = 0; //nOrderMetapointIdxBank[i + 1].second.idx[0]; //(*nOrderMetapointIdxBank[i + 1].second)[0];
+				uint32_t aidx =  /*nOrderMetapointIdxBank[i].second.idx[0];*/ (*nOrderMetapointIdxBank[i].second)[0];
+				uint32_t bidx =  /*nOrderMetapointIdxBank[i + 1].second.idx[0];*/ (*nOrderMetapointIdxBank[i + 1].second)[0];
 				if (aidx == bidx || aidx == bidx + diff || aidx + diff == bidx)
 				{
 					skipcount++;
