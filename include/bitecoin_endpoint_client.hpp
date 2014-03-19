@@ -17,6 +17,8 @@
 #include "bitecoin_hashing.hpp"
 //#include "Clockwork.hpp"
 
+#include <wide_int.h>
+
 #include <random>
 
 #define USECUDA
@@ -24,21 +26,19 @@
 #ifdef USECUDA
 #include <cuda_runtime.h>
 int testcuda();
-
-//template <unsigned N>
-void Clockwork_wrapper(uint32_t* staticbank,
-						  uint32_t* regbank,
-						  uint32_t* sharedbank2,
-						  uint32_t* sharedbank1,
-						  //uint32_t N,
-						  int* bestiBuff,
-						  int* bestiBuffHead,
-						  int blocks,
-						  int threadsPerBlock);
-
 #endif
 
 namespace bitecoin{
+
+#ifdef USECUDA
+	
+	std::vector<wide_as_pair> genpoints_on_GPU (
+		unsigned hashsteps,
+		const uint32_t* const c,
+		const uint32_t* const,
+		const std::vector<uint32_t> &indexbank
+	);
+#endif
 
 	struct metapoint
 	{
@@ -108,9 +108,13 @@ public:
 			return uniform_distr(rand_engine);
 		};
 
+		std::vector<uint32_t> idxbank(Ngd);
+
 		for (unsigned i = 0; i < Ngd; i++)
 		{
 			uint32_t curridx = fastrand();
+			idxbank[i] = curridx;
+
 			bigint_t point = point_preload;
 			point.limbs[0] = curridx;
 
@@ -122,6 +126,12 @@ public:
 			pointidxbank[i] = std::make_pair(point64, curridx);
 
 		}
+
+		/*std::vector<wide_as_pair> ptest = genpoints_on_GPU(
+			roundInfo->hashSteps, roundInfo->c,
+			point_preload.limbs,
+			idxbank
+		);*/
 
 		std::sort(pointidxbank.begin(), pointidxbank.end());
 
@@ -195,6 +205,13 @@ public:
 			std::vector<std::pair<std::pair<uint64_t, uint64_t>, uint32_t>> metapointidxbank;
 			metapointidxbank.reserve(Nss);
 
+			//TODO
+
+			std::vector<wide_as_pair> ptest = genpoints_on_GPU(
+				roundInfo->hashSteps, roundInfo->c,
+				point_preload.limbs,
+				idxbank
+			);
 
 			std::uniform_int_distribution<uint32_t> uniform_baserange(0u, (uint32_t)(-1) - diff);
 			unsigned failcount = 0;

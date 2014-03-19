@@ -26,6 +26,10 @@ namespace bitecoin{
 	{
 		uint32_t limbs[NLIMBS];
 	};
+	struct halfbigint_t
+	{
+		uint32_t limbs[4];
+	};
 	
 	// This provides a primitive randomness step. It is not cryptographic quality,
 	// but suffices for these purposes. There is a constant c that comes from the
