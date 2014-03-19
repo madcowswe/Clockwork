@@ -168,8 +168,8 @@ public:
 			Log(Log_Debug, "Trial %d.", nTrials);
 
 #ifdef DIFFTHINGY
-			unsigned diff = GoldenDiff; //FROM OSKAR
-			unsigned N = 10000;
+			unsigned diff = 0x94632009; //FROM OSKAR
+			//unsigned N = 10000;
 
 			std::vector<uint32_t> indices(roundInfo->maxIndices);
 			std::vector<uint32_t> idxbanks;
@@ -179,8 +179,8 @@ public:
 			std::vector<uint64_t> pointbanks[2];
 			pointbanks[0].resize(N);
 			pointbanks[1].resize(N);
-			std::vector<metapoint> idx_mpoint_bank;
-			idx_mpoint_bank.resize(N);
+			//std::vector<metapoint> idx_mpoint_bank;
+			//idx_mpoint_bank.resize(N);
 
 			for (unsigned i = 0; i < N; ++i)
 			{
@@ -201,8 +201,10 @@ public:
 				}
 
 				//XOR point pair to make meta-point and put in bank
-				idx_mpoint_bank[i].lower_index = idxbanks[i];
-				idx_mpoint_bank[i].value = pointbanks[1][i] ^ pointbanks[0][i];
+				pointidxbank[i].first = pointbanks[1][i] ^ pointbanks[0][i];
+				pointidxbank[i].second = idxbanks[i];
+				//idx_mpoint_bank[i].lower_index = idxbanks[i];
+				//idx_mpoint_bank[i].value = pointbanks[1][i] ^ pointbanks[0][i];
 
 			}
 
@@ -220,16 +222,15 @@ public:
 						assert(false);
 
 					//Check indicies are distinct, if so, skip
-					if (idx_mpoint_bank[i].lower_index == idx_mpoint_bank[j].lower_index || idx_mpoint_bank[i].lower_index + diff == idx_mpoint_bank[j].lower_index || idx_mpoint_bank[j].lower_index + diff == idx_mpoint_bank[i].lower_index)
+					if (pointidxbank[i].second == pointidxbank[j].second || pointidxbank[i].second + diff == pointidxbank[j].second || pointidxbank[j].second + diff == pointidxbank[i].second)
 						continue;
 
-					currentValue = idx_mpoint_bank[i].value ^ idx_mpoint_bank[j].value;
-					currentValue = idx_mpoint_bank[i].value ^ idx_mpoint_bank[j].value;
+					currentValue = pointidxbank[i].first ^ pointidxbank[j].first;
 
 					if (currentValue < currentMin || (currentValue == currentMin && currentValue < currentMin))
 					{						
-						bestIndex[0] = idx_mpoint_bank[i].lower_index;
-						bestIndex[1] = idx_mpoint_bank[j].lower_index;
+						bestIndex[0] = pointidxbank[i].second;
+						bestIndex[1] = pointidxbank[j].second;
 						currentMin = currentValue;
 						currentMin = currentValue;
 					}
