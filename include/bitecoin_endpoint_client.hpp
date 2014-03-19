@@ -105,7 +105,7 @@ public:
 		bigint_t point_preload = PoolHashPreload(roundInfo.get());
 		//bigint_t point_preload = PoolHashPreload_Nonbroken(roundInfo.get());
 
-		unsigned N = 1<<16;
+		unsigned N = 1<<(16+4);
 		std::vector<std::pair<uint64_t, uint32_t>> pointidxbank(N);
 		auto fastrand = std::minstd_rand();
 		for (unsigned i = 0; i < N; i++)
@@ -127,14 +127,15 @@ public:
 
 		uint32_t GoldenDiff = 0;
 		uint64_t bestdistance = -1;
-		unsigned dbgcnt = 0;
+		unsigned skipcount = 0;
+		unsigned overloadcount = 0;
 		for (unsigned i = 0; i < N-1u; i++)
 		{
 			uint32_t aidx = pointidxbank[i].second;
 			uint32_t bidx = pointidxbank[i+1].second;
 			if (aidx == bidx)
 			{
-				dbgcnt++;
+				skipcount++;
 				continue;
 			}
 
@@ -146,20 +147,23 @@ public:
 			else
 				currabsdiff = b-a;
 
-			if (currabsdiff < bestdistance)
+			if (currabsdiff <= bestdistance)
 			{
-				bestdistance = currabsdiff;
-				if (aidx > bidx)
-					GoldenDiff = aidx - bidx;
-				else
-					GoldenDiff = bidx - aidx;
+				if (currabsdiff == bestdistance){
+					overloadcount++;
+				} else {
+					overloadcount = 0;
+					bestdistance = currabsdiff;
+					if (aidx > bidx)
+						GoldenDiff = aidx - bidx;
+					else
+						GoldenDiff = bidx - aidx;
+				}
 			}
-
-
 
 		}
 
-		Log(Log_Verbose, "Best distance 0x%016x\t GoldenDiff %08x. Skipped %u identical.", bestdistance, GoldenDiff, dbgcnt);
+		Log(Log_Verbose, "Best distance 0x%016x\t GoldenDiff %08x. Skipped %u identical, Overload %u.", bestdistance, GoldenDiff, skipcount, overloadcount);
 		
 		unsigned nTrials=0;
 		while(1){
@@ -168,12 +172,12 @@ public:
 			Log(Log_Debug, "Trial %d.", nTrials);
 
 #ifdef DIFFTHINGY
-			unsigned diff = GoldenDiff; //FROM OSKAR
+			unsigned diff = GoldenDiff;//0x94632009;//GoldenDiff;
 			unsigned N = 10000;
 
 			std::vector<uint32_t> indices(roundInfo->maxIndices);
-			std::vector<uint32_t> idxbanks;
-			idxbanks.resize(N);
+			std::vector<uint32_t> idxbank;
+			idxbank.resize(N);
 
 			//Generate point for each index pair
 			std::vector<uint64_t> pointbanks[2];
@@ -184,12 +188,14 @@ public:
 
 			for (unsigned i = 0; i < N; ++i)
 			{
-				idxbanks[i] = rand() / 2;
+				unsigned randoverhead = 0;
+				while((idxbank[i] = fastrand()) > (unsigned)(-1) - diff)
+					randoverhead++;
 
 				for (unsigned currbank = 0; currbank < 2; ++currbank)
 				{
 					bigint_t point = point_preload;
-					point.limbs[0] = idxbanks[i] + currbank*diff;
+					point.limbs[0] = idxbank[i] + currbank*diff;
 
 					// Now step forward by the number specified by the server
 					for (unsigned j = 0; j<roundInfo.get()->hashSteps; j++){
@@ -201,47 +207,46 @@ public:
 				}
 
 				//XOR point pair to make meta-point and put in bank
-				idx_mpoint_bank[i].lower_index = idxbanks[i];
+				idx_mpoint_bank[i].lower_index = idxbank[i];
 				idx_mpoint_bank[i].value = pointbanks[1][i] ^ pointbanks[0][i];
 
 			}
-
 			
 			//XOR meta-points and find minimum
-			uint32_t bestIndex[2];
+			uint32_t bestIndex[2] = {0, 0}; //init to get rid of warnings
 			uint64_t currentMin = -1;
 			uint64_t currentValue;
 
 			for (unsigned i = 0; i < N; ++i)
 			{
-				for (int j = 0; j < (int) (i - 1); ++j)
+				for (int j = 0; j < (int)i - 1; ++j)
 				{
-					if (i == j)
+					if ((int)i == j)
 						assert(false);
 
-					//Check indicies are distinct, if so, skip
+					//Check indicies are distinct, if not, skip
 					if (idx_mpoint_bank[i].lower_index == idx_mpoint_bank[j].lower_index || idx_mpoint_bank[i].lower_index + diff == idx_mpoint_bank[j].lower_index || idx_mpoint_bank[j].lower_index + diff == idx_mpoint_bank[i].lower_index)
 						continue;
 
 					currentValue = idx_mpoint_bank[i].value ^ idx_mpoint_bank[j].value;
-					currentValue = idx_mpoint_bank[i].value ^ idx_mpoint_bank[j].value;
 
-					if (currentValue < currentMin || (currentValue == currentMin && currentValue < currentMin))
-					{						
+					if (currentValue < currentMin)
+					{
 						bestIndex[0] = idx_mpoint_bank[i].lower_index;
 						bestIndex[1] = idx_mpoint_bank[j].lower_index;
-						currentMin = currentValue;
 						currentMin = currentValue;
 					}
 				}
 			}
 
-			uint32_t bestidx[4] = { idxbanks[bestIndex[0]], idxbanks[bestIndex[0]] + diff, idxbanks[bestIndex[1]], idxbanks[bestIndex[1]] + diff};
 
-			std::sort(&bestidx[0], &bestidx[0] + 4);
+			uint32_t bestidx[4] = { bestIndex[0], bestIndex[0] + diff, bestIndex[1], bestIndex[1] + diff};
+			std::sort(bestidx, bestidx+4);
+			
 
-			//Sort bestidx
 			bigint_t proof = HashReferencewPreload(roundInfo.get(), point_preload, 4, bestidx);
+
+			
 
 			//Number of banks
 			unsigned k = 4;

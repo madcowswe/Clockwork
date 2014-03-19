@@ -74,9 +74,6 @@ public:
 			while(1){
 				Log(Log_Info, "Starting round %llu.", roundId);
 
-				
-				
-				
 				auto beginRound=std::make_shared<Packet_ServerBeginRound>();
 				beginRound->roundId=roundId;
 				beginRound->roundSalt=0;//0x1234beef;//0x20ad1d2f;//0;//rand();
