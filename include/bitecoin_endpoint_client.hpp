@@ -317,18 +317,10 @@ public:
 
 #ifdef GENERICSORT
 
-			typedef
-				std::vector <std::pair <std::pair <
-				std::pair <uint64_t, uint64_t>, std::pair<uint64_t, uint64_t >>,
-				std::vector<uint32_t>* >> pair_wide;
-
-			//typedef
-			//	std::vector <std::pair <
-			//	std::pair <uint64_t, uint64_t> ,
-			//	uint32_t > > pair_wide;
 
 
-			pair_wide nOrderMetapointIdxBank;
+
+			std::vector<pair_wide> nOrderMetapointIdxBank;
 			nOrderMetapointIdxBank.reserve(Nss);
 
 			unsigned diff = GoldenDiff;//0x94632009;
@@ -341,10 +333,11 @@ public:
 			std::uniform_int_distribution<uint32_t> uniform_baserange(0u, (uint32_t)(-1) - diff);
 			unsigned failcount = 0;
 
-			//for (int depth = 0; depth < 4; depth++){
+			for (int depth = 0; depth < 4; depth++){
 
 				for (int i = 0; i < Nss; i++)
 				{
+
 					uint32_t idx1 = uniform_baserange(rand_engine);
 					bigint_t point1 = pointFromIdx(roundInfo.get(), point_preload, idx1);
 
@@ -358,41 +351,31 @@ public:
 
 					std::vector<uint32_t> *baseInd = new std::vector<uint32_t>();
 					(*baseInd).push_back(idx1);
+					
+					nOrderMetapointIdxBank.push_back(
+						std::make_pair(std::make_pair(
+						std::make_pair(
+						((uint64_t)metapoint.limbs[7] << 32) + metapoint.limbs[6],
+						((uint64_t)metapoint.limbs[5] << 32) + metapoint.limbs[4]),
+						std::make_pair(
+						((uint64_t)metapoint.limbs[3] << 32) + metapoint.limbs[2],
+						((uint64_t)metapoint.limbs[1] << 32) + metapoint.limbs[0]))
+						, baseInd));
+					
+				}
 
-
-					if (metapoint.limbs[7] == 0u || failcount >= 0.3*Nss)
-					{
-
-						nOrderMetapointIdxBank.push_back(
-							std::make_pair(std::make_pair(
-							std::make_pair(
-							((uint64_t)metapoint.limbs[7] << 32) + metapoint.limbs[6],
-							((uint64_t)metapoint.limbs[5] << 32) + metapoint.limbs[4]),
-							std::make_pair(
-							((uint64_t)metapoint.limbs[3] << 32) + metapoint.limbs[2],
-							((uint64_t)metapoint.limbs[1] << 32) + metapoint.limbs[0]))
-							, baseInd));
-
-					}
-					else {
-						failcount++;
+				if (failcount > 0.20*Nss){
+					Log(Log_Verbose, "We failed to clear MSW %d times when filling Nss=%d", failcount, Nss);
+					if (failcount >= 0.3*Nss){
+						Log(Log_Verbose, "Second pass: Not enough MSW clear: Override!!!!");
 					}
 				}
-			//}
+			}
 
 			//while (nOrderMetapointIdxBank.size() < Nss)
 			//{
 
-
-
 			//}
-
-			if (failcount > 0.20*Nss){
-				Log(Log_Verbose, "We failed to clear MSW %d times when filling Nss=%d", failcount, Nss);
-				if (failcount >= 0.3*Nss){
-					Log(Log_Verbose, "Second pass: Not enough MSW clear: Override!!!!");
-				}
-			}
 
 
 			std::sort(nOrderMetapointIdxBank.begin(), nOrderMetapointIdxBank.end());
@@ -402,7 +385,7 @@ public:
 			std::pair<uint32_t, uint32_t> besti;
 			unsigned skipcount = 0;
 			unsigned overloadcount = 0;
-			for (unsigned i = 0; i < Nss - 1u; i++)
+			for (unsigned i = 0; i < Nss/*nOrderMetapointIdxBank.size()*/ - 1u; i++)
 			{
 
 				uint32_t aidx = (*nOrderMetapointIdxBank[i].second)[0];
