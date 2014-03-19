@@ -7,10 +7,15 @@
 #include <stdio.h>
 #include <math.h>
 
-typedef
-std::pair <std::pair <
-std::pair <uint64_t, uint64_t>, std::pair<uint64_t, uint64_t >> ,
-std::vector<uint32_t>* > pair_wide;
+//typedef
+//std::pair <std::pair <
+//std::pair <uint64_t, uint64_t>, std::pair<uint64_t, uint64_t >> ,
+//std::vector<uint32_t>* > pair_wide;
+
+typedef std::pair<std::pair<uint64_t, uint64_t>, std::pair<uint64_t, uint64_t>>
+wide_as_pair;
+typedef std::pair<wide_as_pair, std::vector<uint32_t>*>
+wide_idx_pair;
 
 /*! Simply library for maintaining large positive integers as an array
 	of 32-bit limbs */

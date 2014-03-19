@@ -320,7 +320,7 @@ public:
 
 
 
-			std::vector<pair_wide> nOrderMetapointIdxBank;
+			std::vector<wide_idx_pair> nOrderMetapointIdxBank;
 			nOrderMetapointIdxBank.reserve(Nss);
 
 			unsigned diff = GoldenDiff;//0x94632009;
@@ -333,49 +333,66 @@ public:
 			std::uniform_int_distribution<uint32_t> uniform_baserange(0u, (uint32_t)(-1) - diff);
 			unsigned failcount = 0;
 
-			for (int depth = 0; depth < 4; depth++){
+			//for (int depth = 0; depth < 4; depth++){
 
 				for (int i = 0; i < Nss; i++)
 				{
 
-					uint32_t idx1 = uniform_baserange(rand_engine);
-					bigint_t point1 = pointFromIdx(roundInfo.get(), point_preload, idx1);
-
-					uint32_t idx2 = idx1 + diff;
-					bigint_t point2 = pointFromIdx(roundInfo.get(), point_preload, idx2);
-
-					bigint_t metapoint;
-					wide_xor(8, metapoint.limbs, point1.limbs, point2.limbs);
-
-					//nOrderMetapointIdxBank[nOrderMetapointIdxBank.size()-1].second.reserve(1);
-
-					std::vector<uint32_t> *baseInd = new std::vector<uint32_t>();
-					(*baseInd).push_back(idx1);
-					
-					nOrderMetapointIdxBank.push_back(
-						std::make_pair(std::make_pair(
-						std::make_pair(
-						((uint64_t)metapoint.limbs[7] << 32) + metapoint.limbs[6],
-						((uint64_t)metapoint.limbs[5] << 32) + metapoint.limbs[4]),
-						std::make_pair(
-						((uint64_t)metapoint.limbs[3] << 32) + metapoint.limbs[2],
-						((uint64_t)metapoint.limbs[1] << 32) + metapoint.limbs[0]))
-						, baseInd));
-					
 				}
+			//}
 
-				if (failcount > 0.20*Nss){
-					Log(Log_Verbose, "We failed to clear MSW %d times when filling Nss=%d", failcount, Nss);
-					if (failcount >= 0.3*Nss){
-						Log(Log_Verbose, "Second pass: Not enough MSW clear: Override!!!!");
-					}
-				}
+			while (nOrderMetapointIdxBank.size() < Nss)
+			{
+
+				uint32_t idx1 = uniform_baserange(rand_engine);
+				bigint_t point1 = pointFromIdx(roundInfo.get(), point_preload, idx1);
+
+				uint32_t idx2 = idx1 + diff;
+				bigint_t point2 = pointFromIdx(roundInfo.get(), point_preload, idx2);
+
+				bigint_t metapoint;
+				wide_xor(8, metapoint.limbs, point1.limbs, point2.limbs);
+
+				//nOrderMetapointIdxBank[nOrderMetapointIdxBank.size()-1].second.reserve(1);
+
+				wide_as_pair newMetapoint;
+
+				newMetapoint.first = std::make_pair(
+					((uint64_t)metapoint.limbs[7] << 32) + metapoint.limbs[6],
+					((uint64_t)metapoint.limbs[5] << 32) + metapoint.limbs[4]);
+
+				newMetapoint.second = std::make_pair(
+					((uint64_t)metapoint.limbs[3] << 32) + metapoint.limbs[2],
+					((uint64_t)metapoint.limbs[1] << 32) + metapoint.limbs[0]);
+
+				wide_idx_pair newIdxMetapoint;
+				//std::vector<uint32_t> idxs; 
+				//idxs.push_back(idx1);
+				std::vector<uint32_t> *idxs = new std::vector<uint32_t>();
+				(*idxs).push_back(idx1);
+				newIdxMetapoint = std::make_pair(newMetapoint, idxs);
+				
+				nOrderMetapointIdxBank.push_back(newIdxMetapoint);
+
+				//std::vector<uint32_t> *baseInd = new std::vector<uint32_t>();
+				//(*baseInd).push_back(idx1);
+				//
+				//nOrderMetapointIdxBank.push_back(
+				//		std::make_pair(std::make_pair(
+				//		
+				//		std::make_pair(
+				//		
+				//		, baseInd));
+
+
 			}
 
-			//while (nOrderMetapointIdxBank.size() < Nss)
-			//{
-
-			//}
+			if (failcount > 0.20*Nss){
+				Log(Log_Verbose, "We failed to clear MSW %d times when filling Nss=%d", failcount, Nss);
+				if (failcount >= 0.3*Nss){
+					Log(Log_Verbose, "Second pass: Not enough MSW clear: Override!!!!");
+				}
+			}
 
 
 			std::sort(nOrderMetapointIdxBank.begin(), nOrderMetapointIdxBank.end());
@@ -388,8 +405,8 @@ public:
 			for (unsigned i = 0; i < Nss/*nOrderMetapointIdxBank.size()*/ - 1u; i++)
 			{
 
-				uint32_t aidx = (*nOrderMetapointIdxBank[i].second)[0];
-				uint32_t bidx = (*nOrderMetapointIdxBank[i + 1].second)[0];
+				uint32_t aidx = /*nOrderMetapointIdxBank[i].second[0];*/ (*nOrderMetapointIdxBank[i].second)[0];
+				uint32_t bidx = /*nOrderMetapointIdxBank[i+1].second[0];*/ (*nOrderMetapointIdxBank[i + 1].second)[0];
 				if (aidx == bidx || aidx == bidx + diff || aidx + diff == bidx)
 				{
 					skipcount++;
