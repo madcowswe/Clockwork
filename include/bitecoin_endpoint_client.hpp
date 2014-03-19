@@ -15,6 +15,7 @@
 #include "bitecoin_protocol.hpp"
 #include "bitecoin_endpoint.hpp"
 #include "bitecoin_hashing.hpp"
+#include "wide_int.h"
 //#include "Clockwork.hpp"
 
 #include <random>
