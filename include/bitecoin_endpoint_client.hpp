@@ -19,7 +19,8 @@
 
 #include <random>
 
-#define SECONDSORT
+//#define SECONDSORT
+#define GENERICSORT
 //#define HR2BANKED
 //#define POSTDIFF2BRUTE
 //#define HR2BANKED_DEGEN
@@ -312,6 +313,134 @@ public:
 
 
 #endif
+
+#ifdef GENERICSORT
+
+			//typedef
+			//	std::vector <std::pair <std::pair <
+			//	std::pair <uint64_t, uint64_t>, std::pair<uint64_t, uint64_t >>,
+			//	std::vector < uint32_t >>> pair_wide;
+
+			typedef
+				std::vector <std::pair <
+				std::pair <uint64_t, uint64_t> ,
+				std::vector < uint32_t >> > pair_wide;
+
+
+			pair_wide nOrderMetapointIdxBank;
+			nOrderMetapointIdxBank.reserve(Nss);
+
+			unsigned diff = GoldenDiff;//0x94632009;
+			//std::vector<std::pair<std::pair<uint64_t, uint64_t>, uint32_t>> metapointidxbank;
+			//metapointidxbank.reserve(Nss);
+
+			//Generate our indices with the golden diff
+			//Take 2 indicies and create meta point
+			std::uniform_int_distribution<uint32_t> uniform_baserange(0u, (uint32_t)(-1) - diff);
+			unsigned failcount = 0;
+			while (nOrderMetapointIdxBank.size() < Nss)
+			{
+				uint32_t idx1 = uniform_baserange(rand_engine);
+				bigint_t point1 = pointFromIdx(roundInfo.get(), point_preload, idx1);
+
+				uint32_t idx2 = idx1 + diff;
+				bigint_t point2 = pointFromIdx(roundInfo.get(), point_preload, idx2);
+
+				bigint_t metapoint;
+				wide_xor(8, metapoint.limbs, point1.limbs, point2.limbs);
+
+				std::vector<uint32_t> baseInd;
+
+				baseInd.push_back(idx1);
+
+				if (metapoint.limbs[7] == 0u || failcount >= 0.3*Nss)
+				{
+
+					nOrderMetapointIdxBank.push_back(
+						std::make_pair(std::make_pair(
+						//std::make_pair(
+						((uint64_t)metapoint.limbs[7] << 32) + metapoint.limbs[6],
+						((uint64_t)metapoint.limbs[5] << 32) + metapoint.limbs[4])/*,
+																				  std::make_pair(
+																				  ((uint64_t)metapoint.limbs[3] << 32) + metapoint.limbs[2],
+																				  ((uint64_t)metapoint.limbs[1] << 32) + metapoint.limbs[0]))*/
+																				  , baseInd));
+
+				} else {
+					failcount++;
+				}
+
+				//metapointidxbank.push_back(std::make_pair(
+				//	std::make_pair(
+				//	((uint64_t)metapoint.limbs[6] << 32) + metapoint.limbs[5],
+				//	((uint64_t)metapoint.limbs[4] << 32) + metapoint.limbs[3]),
+				//	idx1) );
+
+			}
+
+			if (failcount > 0.20*Nss){
+				Log(Log_Verbose, "We failed to clear MSW %d times when filling Nss=%d", failcount, Nss);
+				if (failcount >= 0.3*Nss){
+					Log(Log_Verbose, "Second pass: Not enough MSW clear: Override!!!!");
+				}
+			}
+
+
+			std::sort(nOrderMetapointIdxBank.begin(), nOrderMetapointIdxBank.end());
+
+
+			std::pair<uint64_t, uint64_t> bestmmpoint = std::make_pair(-1ull, -1ull);
+			std::pair<uint32_t, uint32_t> besti;
+			unsigned skipcount = 0;
+			unsigned overloadcount = 0;
+			for (unsigned i = 0; i < Nss - 1u; i++)
+			{
+				//uint32_t aidx = nOrderMetapointIdxBank[i].second[0];
+				//uint32_t bidx = nOrderMetapointIdxBank[i + 1].second[0];
+				uint32_t aidx = nOrderMetapointIdxBank[i].second[0];
+				uint32_t bidx = nOrderMetapointIdxBank[i + 1].second[0];
+				if (aidx == bidx || aidx == bidx + diff || aidx + diff == bidx)
+				{
+					skipcount++;
+					continue;
+				}
+
+				//std::pair<uint64_t, uint64_t> a = nOrderMetapointIdxBank[i].first.first;
+				//std::pair<uint64_t, uint64_t> b = nOrderMetapointIdxBank[i + 1].first.first;
+				std::pair<uint64_t, uint64_t> a = nOrderMetapointIdxBank[i].first;
+				std::pair<uint64_t, uint64_t> b = nOrderMetapointIdxBank[i + 1].first;
+				std::pair<uint64_t, uint64_t> currmmpoint = pairwise_xor(a, b);
+
+				if (currmmpoint <= bestmmpoint)
+				{
+					if (currmmpoint == bestmmpoint)
+					{
+						overloadcount++;
+					}
+					else {
+						bestmmpoint = currmmpoint;
+						besti = std::make_pair(aidx, bidx);
+					}
+				}
+			}
+
+			//And now we do meta-meta points
+
+
+			Log(Log_Debug, "Second pass: Skipped %u inclusive idx, Overload %u", skipcount, overloadcount);
+
+
+			uint32_t bestidx[4] = { besti.first, besti.first + diff, besti.second, besti.second + diff };
+			std::sort(bestidx, bestidx + 4);
+
+			bigint_t proof = HashReferencewPreload(roundInfo.get(), point_preload, 4, bestidx);
+
+			//Number of idx
+			k = 4;
+
+
+#endif
+
 #ifdef POSTDIFF2BRUTE
 			unsigned diff = GoldenDiff;//0x94632009;//GoldenDiff;
 			unsigned N = 10000;
