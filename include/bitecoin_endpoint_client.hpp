@@ -20,7 +20,7 @@
 #include <random>
 
 //#define HR2BANKED
-#define DIFFTHINGY
+#define POSTDIFF2BRUTE
 //#define HR2BANKED_DEGEN
 //#define HRkBANKED
 //#define HRCUDA
@@ -168,7 +168,6 @@ public:
 						GoldenDiff = bidx - aidx;
 				}
 			}
-
 		}
 
 		Log(Log_Verbose, "Best distance 0x%016x\t GoldenDiff 0x%08x. Skipped %u identical, Overload %u.", bestdistance, GoldenDiff, skipcount, overloadcount);
@@ -179,11 +178,10 @@ public:
 			
 			Log(Log_Debug, "Trial %d.", nTrials);
 
-#ifdef DIFFTHINGY
+#ifdef POSTDIFF2BRUTE
 			unsigned diff = GoldenDiff;//0x94632009;//GoldenDiff;
 			unsigned N = 10000;
 
-			std::vector<uint32_t> indices(roundInfo->maxIndices);
 			std::vector<uint32_t> idxbank;
 			idxbank.resize(N);
 
@@ -250,7 +248,6 @@ public:
 					}
 				}
 			}
-
 
 			uint32_t bestidx[4] = { bestIndex[0], bestIndex[0] + diff, bestIndex[1], bestIndex[1] + diff};
 			std::sort(bestidx, bestidx+4);
