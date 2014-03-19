@@ -40,7 +40,7 @@ EXCHANGE_PORT = 4123
 	
 # Launch a client connected to a shared exchange
 connect_exchange : src/bitecoin_client
-	src/bitecoin_client Donkey-- 3 tcp-client $(EXCHANGE_ADDR)  $(EXCHANGE_PORT)
+	src/bitecoin_client Clockwork 3 tcp-client $(EXCHANGE_ADDR)  $(EXCHANGE_PORT)
 
 
 #src/bitecoin_client: src/bitecoin_client.o
