@@ -105,9 +105,17 @@ public:
 		bigint_t point_preload = PoolHashPreload(roundInfo.get());
 		//bigint_t point_preload = PoolHashPreload_Nonbroken(roundInfo.get());
 
-		unsigned N = 1<<(16+4);
+		unsigned N = 1<<(16+0);
 		std::vector<std::pair<uint64_t, uint32_t>> pointidxbank(N);
-		auto fastrand = std::minstd_rand();
+
+		std::random_device seeder;
+		std::minstd_rand rand_engine(seeder());
+		std::uniform_int_distribution<uint32_t> uniform_distr;
+
+		auto fastrand = [&]{
+			return uniform_distr(rand_engine);
+		};
+
 		for (unsigned i = 0; i < N; i++)
 		{
 			uint32_t curridx = fastrand();
@@ -163,7 +171,7 @@ public:
 
 		}
 
-		Log(Log_Verbose, "Best distance 0x%016x\t GoldenDiff %08x. Skipped %u identical, Overload %u.", bestdistance, GoldenDiff, skipcount, overloadcount);
+		Log(Log_Verbose, "Best distance 0x%016x\t GoldenDiff 0x%08x. Skipped %u identical, Overload %u.", bestdistance, GoldenDiff, skipcount, overloadcount);
 		
 		unsigned nTrials=0;
 		while(1){
@@ -186,9 +194,11 @@ public:
 			std::vector<metapoint> idx_mpoint_bank;
 			idx_mpoint_bank.resize(N);
 
+			unsigned randoverhead = 0;
 			for (unsigned i = 0; i < N; ++i)
 			{
-				unsigned randoverhead = 0;
+				
+				//HACK, use a proper uniform distr
 				while((idxbank[i] = fastrand()) > (unsigned)(-1) - diff)
 					randoverhead++;
 
@@ -211,6 +221,8 @@ public:
 				idx_mpoint_bank[i].value = pointbanks[1][i] ^ pointbanks[0][i];
 
 			}
+
+			//Log(Log_Verbose, "Randoverhead was %g\%", (double)randoverhead/N);
 			
 			//XOR meta-points and find minimum
 			uint32_t bestIndex[2] = {0, 0}; //init to get rid of warnings
