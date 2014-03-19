@@ -242,16 +242,16 @@ public:
 				bigint_t metapoint;
 				wide_xor(8, metapoint.limbs, point1.limbs, point2.limbs);
 
-				//if (metapoint.limbs[7] == 0u || failcount >= 0.3*Nss)
-				//{
+				if (metapoint.limbs[7] == 0u || failcount >= 0.3*Nss)
+				{
 					metapointidxbank.push_back(std::make_pair(
 						std::make_pair(
 						((uint64_t)metapoint.limbs[6] << 32) + metapoint.limbs[5],
 						((uint64_t)metapoint.limbs[4] << 32) + metapoint.limbs[3]),
 						idx1) );
-				//} else {
-				//	failcount++;
-				//}
+				} else {
+					failcount++;
+				}
 			}
 
 			if (failcount > 0.20*Nss){
