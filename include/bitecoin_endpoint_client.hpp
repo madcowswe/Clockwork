@@ -318,78 +318,72 @@ public:
 #ifdef GENERICSORT
 
 
-
-
-			//std::vector<wide_idx_pair<1>::type > nOrderMetapointIdxBank;
 			std::vector<wide_idx_pair> nOrderMetapointIdxBank;
 			nOrderMetapointIdxBank.reserve(Nss);
 
 			unsigned diff = GoldenDiff;//0x94632009;
-			//std::vector<std::pair<std::pair<uint64_t, uint64_t>, uint32_t>> metapointidxbank;
-			//metapointidxbank.reserve(Nss);
-			//std::vector<uint32_t> baseInd;
-			//baseInd.push_back(100);
-			//Generate our indices with the golden diff
-			//Take 2 indicies and create meta point
+
 			std::uniform_int_distribution<uint32_t> uniform_baserange(0u, (uint32_t)(-1) - diff);
 			unsigned failcount = 0;
 
-			for (int depth = 0; depth < 4; depth++){
+			std::pair<uint64_t, uint64_t> bestmmpoint = std::make_pair(-1ull, -1ull);
+			std::pair<uint32_t, uint32_t> besti;
+			unsigned skipcount = 0;
+			unsigned overloadcount = 0;
+			double tic1 = now();
+			//for (int depth = 0; depth < 1; depth++){
+
+				//0 depth:	Generate indicies
+				//			Generate points from indicies
+				//			XOR to make meta-points
+				//			Put metapoints and indicies into bank (1 base 1 implied)
+				//			Sort
+				//1 depth:	Take meta-points and indicies
+				//			XOR to make meta-meta points store indicies (2 base - 2 implied)
+				//			Sort
+				//2 depth:	Take meta-meta points and indicies 4 base - 4 implied
+				//			XOR to make meta^3-points
+				//			Sort
+				//
 
 				for (int i = 0; i < Nss; i++)
 				{
+					uint32_t idx1 = uniform_baserange(rand_engine);
+					bigint_t point1 = pointFromIdx(roundInfo.get(), point_preload, idx1);
+
+					uint32_t idx2 = idx1 + diff;
+					bigint_t point2 = pointFromIdx(roundInfo.get(), point_preload, idx2);
+
+					bigint_t metapoint;
+					wide_xor(8, metapoint.limbs, point1.limbs, point2.limbs);
+
+					wide_as_pair newMetapoint;
+
+					newMetapoint.first = std::make_pair(
+						((uint64_t)metapoint.limbs[7] << 32) + metapoint.limbs[6],
+						((uint64_t)metapoint.limbs[5] << 32) + metapoint.limbs[4]);
+
+					newMetapoint.second = std::make_pair(
+						((uint64_t)metapoint.limbs[3] << 32) + metapoint.limbs[2],
+						((uint64_t)metapoint.limbs[1] << 32) + metapoint.limbs[0]);
+
+
+					std::vector<uint32_t> *idxs = new std::vector<uint32_t>();
+					(*idxs).push_back(idx1);
+
+					//std::vector<uint32_t> indicies; indicies.push_back(idx1);
+
+					wide_idx_pair wip;
+					wip.first = newMetapoint; wip.second = idxs;
+
+					nOrderMetapointIdxBank.push_back(wip);
 
 				}
-			}
-
-			while (nOrderMetapointIdxBank.size() < Nss)
-			{
-
-				uint32_t idx1 = uniform_baserange(rand_engine);
-				bigint_t point1 = pointFromIdx(roundInfo.get(), point_preload, idx1);
-
-				uint32_t idx2 = idx1 + diff;
-				bigint_t point2 = pointFromIdx(roundInfo.get(), point_preload, idx2);
-
-				bigint_t metapoint;
-				wide_xor(8, metapoint.limbs, point1.limbs, point2.limbs);
-
-				//nOrderMetapointIdxBank[nOrderMetapointIdxBank.size()-1].second.reserve(1);
-
-				wide_as_pair newMetapoint;
-
-				newMetapoint.first = std::make_pair(
-					((uint64_t)metapoint.limbs[7] << 32) + metapoint.limbs[6],
-					((uint64_t)metapoint.limbs[5] << 32) + metapoint.limbs[4]);
-
-				newMetapoint.second = std::make_pair(
-					((uint64_t)metapoint.limbs[3] << 32) + metapoint.limbs[2],
-					((uint64_t)metapoint.limbs[1] << 32) + metapoint.limbs[0]);
-
-				//nOrderMetapointIdxBank.
-				
-				//wide_idx_pair<1>::type newIdxMetapoint;
-				//newIdxMetapoint.second = idxarr<1>{ idx1} ;
-				//idxarr<1> te; 
-				
-				//idxarr<1> te;				
-				//te.idx[0] = idx1;
-
-				//wide_idx_pair<1>::type wip;
-				//wip.first = newMetapoint; wip.second = te;
-				//std::vector<uint32_t> idxs; 
-				//idxs.push_back(idx1);
-				std::vector<uint32_t> *idxs = new std::vector<uint32_t>();
-				(*idxs).push_back(idx1);
-				//newIdxMetapoint = std::make_pair(newMetapoint, idxs);
-				//
-
-				wide_idx_pair wip; 
-				wip.first = newMetapoint; wip.second = idxs;
-
-				nOrderMetapointIdxBank.push_back(wip);
-
-			}
+				double tic2 = now();
+				Log(Log_Verbose, "\n\nFirst loop:%d\n\n", (tic2 - tic1)*1e-9 );
+			//while (nOrderMetapointIdxBank.size() < Nss)
+			//{
+			//}
 
 			if (failcount > 0.20*Nss){
 				Log(Log_Verbose, "We failed to clear MSW %d times when filling Nss=%d", failcount, Nss);
@@ -398,19 +392,84 @@ public:
 				}
 			}
 
+			std::sort(nOrderMetapointIdxBank.begin(), nOrderMetapointIdxBank.end());
+			
+
+			//Depth 1:
+			for (unsigned i = 0; i < Nss - 1u; i++)
+			{
+				uint32_t aidx =  (*nOrderMetapointIdxBank[i].second)[0];
+				uint32_t bidx =  (*nOrderMetapointIdxBank[i + 1].second)[0];
+
+				if (aidx == bidx || aidx == bidx + diff || aidx + diff == bidx)
+				{
+					Log(Log_Verbose, "\n\Skipped index:%d\n\n", i);
+					skipcount++;
+					continue;
+				}
+
+				std::pair<uint64_t, uint64_t> a = nOrderMetapointIdxBank[i].first.first;
+				std::pair<uint64_t, uint64_t> b = nOrderMetapointIdxBank[i + 1].first.first;
+				std::pair<uint64_t, uint64_t> currmmpointUpper = pairwise_xor(a, b);
+
+				a = nOrderMetapointIdxBank[i].first.second;
+				b = nOrderMetapointIdxBank[i + 1].first.second;
+				std::pair<uint64_t, uint64_t> currmmpointLower = pairwise_xor(a, b);
+
+				//Meta-meta points
+				nOrderMetapointIdxBank[i].first.first = currmmpointUpper;
+				nOrderMetapointIdxBank[i].first.second = currmmpointLower;
+
+				//Update indicies
+				(*nOrderMetapointIdxBank[i].second)[0] = aidx;
+				(*nOrderMetapointIdxBank[i].second).push_back(bidx);
+
+			}
 
 			std::sort(nOrderMetapointIdxBank.begin(), nOrderMetapointIdxBank.end());
 
+			//Depth 2:
+			for (unsigned i = 0; i < Nss - 2u; i++)
+			{
+				uint32_t aidx1 = (*nOrderMetapointIdxBank[i].second)[0];
+				uint32_t aidx2 = (*nOrderMetapointIdxBank[i].second)[1];
+				uint32_t bidx1 = (*nOrderMetapointIdxBank[i + 1].second)[0];
+				uint32_t bidx2 = (*nOrderMetapointIdxBank[i + 1].second)[1];
 
-			std::pair<uint64_t, uint64_t> bestmmpoint = std::make_pair(-1ull, -1ull);
-			std::pair<uint32_t, uint32_t> besti;
-			unsigned skipcount = 0;
-			unsigned overloadcount = 0;
+				if (aidx1 == bidx1 || aidx1 == bidx1 + diff || aidx1 + diff == bidx1 || aidx1 == bidx2
+					|| aidx2 == bidx2 || aidx2 == bidx2 + diff || aidx2 + diff == bidx2 || aidx2 == bidx1)
+				{
+					skipcount++;
+					continue;
+				}
+
+				std::pair<uint64_t, uint64_t> a = nOrderMetapointIdxBank[i].first.first;
+				std::pair<uint64_t, uint64_t> b = nOrderMetapointIdxBank[i + 1].first.first;
+				std::pair<uint64_t, uint64_t> currmmpointUpper = pairwise_xor(a, b);
+
+				a = nOrderMetapointIdxBank[i].first.second;
+				b = nOrderMetapointIdxBank[i + 1].first.second;
+				std::pair<uint64_t, uint64_t> currmmpointLower = pairwise_xor(a, b);
+
+				//Meta-meta points
+				nOrderMetapointIdxBank[i].first.first = currmmpointUpper;
+				nOrderMetapointIdxBank[i].first.second = currmmpointLower;
+
+				//Update indicies
+				(*nOrderMetapointIdxBank[i].second)[0] = aidx1;
+				(*nOrderMetapointIdxBank[i].second)[1] = aidx2;
+				(*nOrderMetapointIdxBank[i].second).push_back(bidx1);
+				(*nOrderMetapointIdxBank[i].second).push_back(bidx2);
+
+			}
+
 			for (unsigned i = 0; i < Nss/*nOrderMetapointIdxBank.size()*/ - 1u; i++)
 			{
-
 				uint32_t aidx =  /*nOrderMetapointIdxBank[i].second.idx[0];*/ (*nOrderMetapointIdxBank[i].second)[0];
 				uint32_t bidx =  /*nOrderMetapointIdxBank[i + 1].second.idx[0];*/ (*nOrderMetapointIdxBank[i + 1].second)[0];
+
+				//uint32_t aidx =  nOrderMetapointIdxBank[i].second[0]; 
+				//uint32_t bidx =  nOrderMetapointIdxBank[i + 1].second[0]; 
 				if (aidx == bidx || aidx == bidx + diff || aidx + diff == bidx)
 				{
 					skipcount++;
@@ -433,6 +492,10 @@ public:
 					}
 				}
 			}
+
+			
+
+			//}
 
 			//And now we do meta-meta points
 
