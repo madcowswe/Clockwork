@@ -341,58 +341,50 @@ public:
 			unsigned failcount = 0;
 
 			//for (int depth = 0; depth < 4; depth++){
-			//	for (int i = 0; i < Nss; i++)
-			//	{
 
-			//	}
+				for (int i = 0; i < Nss; i++)
+				{
+					uint32_t idx1 = uniform_baserange(rand_engine);
+					bigint_t point1 = pointFromIdx(roundInfo.get(), point_preload, idx1);
+
+					uint32_t idx2 = idx1 + diff;
+					bigint_t point2 = pointFromIdx(roundInfo.get(), point_preload, idx2);
+
+					bigint_t metapoint;
+					wide_xor(8, metapoint.limbs, point1.limbs, point2.limbs);
+
+					//nOrderMetapointIdxBank[nOrderMetapointIdxBank.size()-1].second.reserve(1);
+
+					std::vector<uint32_t> *baseInd = new std::vector<uint32_t>();
+					(*baseInd).push_back(idx1);
+
+
+					if (metapoint.limbs[7] == 0u || failcount >= 0.3*Nss)
+					{
+
+						nOrderMetapointIdxBank.push_back(
+							std::make_pair(std::make_pair(
+							std::make_pair(
+							((uint64_t)metapoint.limbs[7] << 32) + metapoint.limbs[6],
+							((uint64_t)metapoint.limbs[5] << 32) + metapoint.limbs[4]),
+							std::make_pair(
+							((uint64_t)metapoint.limbs[3] << 32) + metapoint.limbs[2],
+							((uint64_t)metapoint.limbs[1] << 32) + metapoint.limbs[0]))
+							, baseInd));
+
+					}
+					else {
+						failcount++;
+					}
+				}
 			//}
 
-			while (nOrderMetapointIdxBank.size() < Nss)
-			{
-				uint32_t idx1 = uniform_baserange(rand_engine);
-				bigint_t point1 = pointFromIdx(roundInfo.get(), point_preload, idx1);
+			//while (nOrderMetapointIdxBank.size() < Nss)
+			//{
 
-				uint32_t idx2 = idx1 + diff;
-				bigint_t point2 = pointFromIdx(roundInfo.get(), point_preload, idx2);
 
-				bigint_t metapoint;
-				wide_xor(8, metapoint.limbs, point1.limbs, point2.limbs);
 
-				//nOrderMetapointIdxBank[nOrderMetapointIdxBank.size()-1].second.reserve(1);
-
-				std::vector<uint32_t> *baseInd = new std::vector<uint32_t>();
-				//std::vector<uint32_t> *baseInd = new std::vector<uint32_t>();
-				(*baseInd).push_back(idx1);
-				//std::vector<uint32_t> baseInd;
-				//baseInd.push_back(idx1);
-				//baseInd[0] = idx1; 
-				//baseInd.push_back( idx1);
-				//(*baseInd).push_back(idx1);
-
-				if (metapoint.limbs[7] == 0u || failcount >= 0.3*Nss)
-				{
-
-					nOrderMetapointIdxBank.push_back(
-						std::make_pair(std::make_pair(
-						std::make_pair(
-						((uint64_t)metapoint.limbs[7] << 32) + metapoint.limbs[6],
-						((uint64_t)metapoint.limbs[5] << 32) + metapoint.limbs[4]),
-						std::make_pair(
-						((uint64_t)metapoint.limbs[3] << 32) + metapoint.limbs[2],
-						((uint64_t)metapoint.limbs[1] << 32) + metapoint.limbs[0]))
-						, baseInd));
-
-				} else {
-					failcount++;
-				}
-
-				//metapointidxbank.push_back(std::make_pair(
-				//	std::make_pair(
-				//	((uint64_t)metapoint.limbs[6] << 32) + metapoint.limbs[5],
-				//	((uint64_t)metapoint.limbs[4] << 32) + metapoint.limbs[3]),
-				//	idx1) );
-
-			}
+			//}
 
 			if (failcount > 0.20*Nss){
 				Log(Log_Verbose, "We failed to clear MSW %d times when filling Nss=%d", failcount, Nss);
