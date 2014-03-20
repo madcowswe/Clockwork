@@ -6,16 +6,18 @@ CPPFLAGS += -std=c++11 -W -Wall -g -MMD
 CPPFLAGS += -O3
 CPPFLAGS += -I include -I src
 
-LDLIBS = -lm -lOpenCL
+LDLIBS = -lm -ltbb
 
 # For your makefile, add TBB and OpenCL as appropriate
-# OpenCL stuff
-OpenCL_DIR = opencl_sdk
-OpenCL_INC_DIR = $(OpenCL_DIR)/include
-OpenCL_LIB_DIR = $(OpenCL_DIR)/lib/cygwin/x86_64
+#
 
-CPPFLAGS += -I $(OpenCL_INC_DIR)
-LDFLAGS += -L $(OpenCL_LIB_DIR)
+# TBB stuff
+TBB_DIR = tbb42_20131118oss
+TBB_INC_DIR = $(TBB_DIR)/include
+TBB_LIB_DIR = $(TBB_DIR)/lib/cygwin/x86_64
+
+CPPFLAGS += -I $(TBB_INC_DIR)
+LDFLAGS += -L $(TBB_LIB_DIR)
 
 # Launch client and server connected by pipes
 launch_pipes : src/bitecoin_server src/bitecoin_client

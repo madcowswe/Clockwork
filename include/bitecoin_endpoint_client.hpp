@@ -19,6 +19,8 @@
 
 #include <random>
 
+#include <tbb/parallel_for.h>
+
 //#define USECUDA
 
 #ifdef USECUDA
@@ -108,7 +110,8 @@ public:
 			return uniform_distr(rand_engine);
 		};
 
-		for (unsigned i = 0; i < Ngd; i++)
+		//for (unsigned i = 0; i < Ngd; i++)
+		auto genpts = [&](unsigned i)
 		{
 			uint32_t curridx = fastrand();
 			bigint_t point = point_preload;
@@ -121,7 +124,9 @@ public:
 			uint64_t point64 = ((uint64_t)point.limbs[7] << 32) + point.limbs[6];
 			pointidxbank[i] = std::make_pair(point64, curridx);
 
-		}
+		};
+
+		tbb::parallel_for(0u, Ngd, 1u, genpts);
 
 		std::sort(pointidxbank.begin(), pointidxbank.end());
 
