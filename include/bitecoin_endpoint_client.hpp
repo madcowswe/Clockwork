@@ -19,7 +19,6 @@
 #include "bitecoin_hashing.hpp"
 #include "wide_int.h"
 
-
 //#include "Clockwork.hpp"
 
 #include <random>
@@ -101,8 +100,8 @@ public:
 
 		bigint_t point_preload = PoolHashPreload(roundInfo.get());
 		//bigint_t point_preload = PoolHashPreload_Nonbroken(roundInfo.get());
-
-
+		
+		
 		//TODO: weak Seen set & strong GoldenDiff cache
 
 		unsigned Ngd = 1<<(16+1);
@@ -292,7 +291,12 @@ public:
 #ifdef GENERICSORT
 
 
-			std::vector<wide_idx_pair_1> nOrderMetapointIdxBank;
+			std::vector<wide_idx_pair_4> nOrderMetapointIdxBank;
+			std::vector<wide_idx_pair_4> nOrderMetaMetapointIdxBank;
+			std::vector<wide_idx_pair_4> nOrderMetaMetaMetapointIdxBank;
+
+			std::vector<wide_idx_pair_4>* currentBank;
+
 			nOrderMetapointIdxBank.reserve(Nss);
 
 			unsigned diff = GoldenDiff;//0x94632009;
@@ -306,20 +310,25 @@ public:
 			unsigned skipcount = 0;
 			unsigned overloadcount = 0;
 			double tic1 = now();
+
+			unsigned enabledIndicies = 2;
+			int workingBankSize = Nss;
 			//for (int depth = 0; depth < 1; depth++){
 
-				//0 depth:	Generate indicies
+				//1 depth:	Generate indicies
 				//			Generate points from indicies
 				//			XOR to make meta-points
 				//			Put metapoints and indicies into bank (1 base 1 implied)
 				//			Sort
-				//1 depth:	Take meta-points and indicies
+				//2 depth:	Take meta-points and indicies
 				//			XOR to make meta-meta points store indicies (2 base - 2 implied)
 				//			Sort
-				//2 depth:	Take meta-meta points and indicies 4 base - 4 implied
+				//3 depth:	Take meta-meta points and indicies 4 base - 4 implied
 				//			XOR to make meta^3-points
 				//			Sort
-				//
+				//		
+				//			THEN FIND BEST PROOF
+				//N.B: Best indicies 
 
 				for (unsigned i = 0; i < Nss; i++)
 				{
@@ -332,7 +341,7 @@ public:
 					bigint_t metapoint;
 					wide_xor(8, metapoint.limbs, point1.limbs, point2.limbs);
 
-					wide_idx_pair_1 newMetapoint;
+					wide_idx_pair_4 newMetapoint;
 
 					newMetapoint.first.first = std::make_pair(
 						((uint64_t)metapoint.limbs[7] << 32) + metapoint.limbs[6],
@@ -360,118 +369,152 @@ public:
 
 			std::sort(nOrderMetapointIdxBank.begin(), nOrderMetapointIdxBank.end());
 			
-			std::vector<wide_idx_pair_2> nOrderMetaMetapointIdxBank;
+			
 			nOrderMetaMetapointIdxBank.reserve(std::max(((int)Nss)-1,0));
 
-			skipcount = 0;
-			//Depth 1:
-			for (unsigned i = 0; i < (unsigned)std::max((int)Nss - 1, 0); i++)
-			{
-				uint32_t aidx =  nOrderMetapointIdxBank[i].second[0];
-				uint32_t bidx =  nOrderMetapointIdxBank[i + 1].second[0];
-
-				std::array<uint32_t, 4> indicies = { aidx, bidx, aidx + diff, bidx + diff};
-				std::sort(indicies.begin(), indicies.end());
-				auto x = std::adjacent_find(indicies.begin(), indicies.end());
+			workingBankSize = (unsigned)std::max((int)Nss - 1, 0);
+			currentBank = &nOrderMetapointIdxBank;
+			//4 indicies you know
+			if (roundInfo.get()->maxIndices >= 8) {
+				currentBank = &nOrderMetaMetapointIdxBank;
+				enabledIndicies = 4;
+				skipcount = 0;
+				//Depth 2:
 				
-				if (x != indicies.end())
+				for (unsigned i = 0; i < workingBankSize; i++)
 				{
-					//Log(Log_Verbose, "Skipped index:%d", i);
-					skipcount++;
-					continue;
+					uint32_t aidx = nOrderMetapointIdxBank[i].second[0];
+					uint32_t bidx = nOrderMetapointIdxBank[i + 1].second[0];
+
+					std::array<uint32_t, 4> indicies = { aidx, bidx, aidx + diff, bidx + diff };
+					std::sort(indicies.begin(), indicies.end());
+					auto x = std::adjacent_find(indicies.begin(), indicies.end());
+
+					if (x != indicies.end())
+					{
+						//Log(Log_Verbose, "Skipped index:%d", i);
+						skipcount++;
+						continue;
+					}
+
+					auto a = nOrderMetapointIdxBank[i].first;
+					auto b = nOrderMetapointIdxBank[i + 1].first;
+					auto currmmpoint = wap_xor(a, b);
+
+					wide_idx_pair_4 wip;
+
+					//Meta-meta points
+					wip.first = currmmpoint;
+
+					//Update indicies
+					wip.second[0] = aidx;
+					wip.second[1] = bidx;
+
+					nOrderMetaMetapointIdxBank.push_back(wip);
+
+				}
+				Log(Log_Debug, "Second loop. Skipped %d", skipcount);
+				std::sort(nOrderMetaMetapointIdxBank.begin(), nOrderMetaMetapointIdxBank.end());
+
+				
+				nOrderMetaMetaMetapointIdxBank.reserve(std::max((int)nOrderMetaMetapointIdxBank.size() - 1, 0));
+
+				unsigned skipcount1 = 0;
+				workingBankSize = ((int)nOrderMetaMetapointIdxBank.size() - 1);
+				// 8 indicies you know
+				//Depth 3:
+				if (roundInfo.get()->maxIndices >= 16) {					
+					enabledIndicies = 8;
+					currentBank = &nOrderMetaMetaMetapointIdxBank;
+					for (int i = 0; i < workingBankSize; i++)
+					{
+						uint32_t aidx1 = nOrderMetaMetapointIdxBank[i].second[0];
+						uint32_t aidx2 = nOrderMetaMetapointIdxBank[i].second[1];
+						uint32_t bidx1 = nOrderMetaMetapointIdxBank[i + 1].second[0];
+						uint32_t bidx2 = nOrderMetaMetapointIdxBank[i + 1].second[1];
+
+						std::array<uint32_t, 8> indicies = { aidx1, aidx2, bidx1, bidx2, aidx1 + diff, aidx2 + diff, bidx1 + diff, bidx2 + diff };
+						std::sort(indicies.begin(), indicies.end());
+						auto x = std::adjacent_find(indicies.begin(), indicies.end());
+
+						if (x != indicies.end())
+						{
+							skipcount1++;
+							continue;
+						}
+
+						auto a = nOrderMetaMetapointIdxBank[i].first;
+						auto b = nOrderMetaMetapointIdxBank[i + 1].first;
+						auto currmmpoint = wap_xor(a, b);
+
+						wide_idx_pair_4 wip;
+
+						//Meta-meta-meta points
+						wip.first = currmmpoint;
+
+						//Update indicies
+						wip.second[0] = aidx1;
+						wip.second[1] = aidx2;
+						wip.second[2] = bidx1;
+						wip.second[3] = bidx2;
+
+						nOrderMetaMetaMetapointIdxBank.push_back(wip);
+
+					}
+
+					Log(Log_Debug, "Third loop. Skipped %d", skipcount1);
+
+					std::sort(nOrderMetaMetaMetapointIdxBank.begin(), nOrderMetaMetaMetapointIdxBank.end());
+
+					Log(Log_Debug, "Third loop");
+
+					workingBankSize = ((int)nOrderMetaMetaMetapointIdxBank.size()) - 1;
 				}
 
-				auto a = nOrderMetapointIdxBank[i].first;
-				auto b = nOrderMetapointIdxBank[i + 1].first;
-				auto currmmpoint = wap_xor(a, b);
-
-				wide_idx_pair_2 wip;
-				
-				//Meta-meta points
-				wip.first = currmmpoint;
-
-				//Update indicies
-				wip.second[0] = aidx;
-				wip.second[1] = bidx;
-
-				nOrderMetaMetapointIdxBank.push_back(wip);
-
-			}
-			Log(Log_Debug, "Second loop. Skipped %d", skipcount);
-			std::sort(nOrderMetaMetapointIdxBank.begin(), nOrderMetaMetapointIdxBank.end());
-
-			std::vector<wide_idx_pair_4> nOrderMetaMetaMetapointIdxBank; 
-			nOrderMetaMetaMetapointIdxBank.reserve(std::max((int)nOrderMetaMetapointIdxBank.size() - 1, 0));
-			
-			unsigned skipcount1 = 0;
-
-			//Depth 2:
-			for (int i = 0; i < ((int)nOrderMetaMetapointIdxBank.size() - 1); i++)
-			{
-				uint32_t aidx1 = nOrderMetaMetapointIdxBank[i].second[0];
-				uint32_t aidx2 = nOrderMetaMetapointIdxBank[i].second[1];
-				uint32_t bidx1 = nOrderMetaMetapointIdxBank[i+1].second[0];
-				uint32_t bidx2 = nOrderMetaMetapointIdxBank[i+1].second[1];
-
-				std::array<uint32_t, 8> indicies = { aidx1, aidx2, bidx1, bidx2, aidx1 + diff, aidx2 + diff, bidx1 + diff, bidx2 + diff };
-				std::sort(indicies.begin(), indicies.end());
-				auto x = std::adjacent_find(indicies.begin(), indicies.end());
-				
-				if (x != indicies.end())
-				{
-					skipcount1++;
-					continue;
-				}
-
-				auto a = nOrderMetaMetapointIdxBank[i].first;
-				auto b = nOrderMetaMetapointIdxBank[i + 1].first;
-				auto currmmpoint = wap_xor(a, b);
-
-				wide_idx_pair_4 wip;
-
-				//Meta-meta-meta points
-				wip.first = currmmpoint;
-
-				//Update indicies
-				wip.second[0] = aidx1;
-				wip.second[1] = aidx2;
-				wip.second[2] = bidx1;
-				wip.second[3] = bidx2;
-
-				nOrderMetaMetaMetapointIdxBank.push_back(wip);
-
 			}
 
-			Log(Log_Debug, "Third loop. Skipped %d", skipcount1);
+			//auto *bankptr = nOrderMetaMetaMetapointIdxBank;
 
-			std::sort(nOrderMetaMetaMetapointIdxBank.begin(), nOrderMetaMetaMetapointIdxBank.end());
 			unsigned skipcount2 = 0;
-			Log(Log_Debug, "Third loop");
-			
+
 			std::array<uint32_t, 16> besti;
+			enabledIndicies *= 2;
 			bool bestivalid = 0;
-			for (int i = 0; i < ((int) nOrderMetaMetaMetapointIdxBank.size()) - 1; i++)
+			for (int i = 0; i < workingBankSize ; i++)
 			{
+				std::array<uint32_t, 16> indicies;
+				for (int j = 0; j < enabledIndicies/4; j++)				
+					indicies[j] = (*currentBank)[i].second[j];
 
-				uint32_t aidx1 = nOrderMetaMetaMetapointIdxBank[i].second[0];
-				uint32_t aidx2 = nOrderMetaMetaMetapointIdxBank[i].second[1];
-				uint32_t aidx3 = nOrderMetaMetaMetapointIdxBank[i].second[2];
-				uint32_t aidx4 = nOrderMetaMetaMetapointIdxBank[i].second[3];
-				uint32_t bidx1 = nOrderMetaMetaMetapointIdxBank[i + 1].second[0];
-				uint32_t bidx2 = nOrderMetaMetaMetapointIdxBank[i + 1].second[1];
-				uint32_t bidx3 = nOrderMetaMetaMetapointIdxBank[i + 1].second[2];
-				uint32_t bidx4 = nOrderMetaMetaMetapointIdxBank[i + 1].second[3];
+				for (int j = 0; j < enabledIndicies/4; j++)
+					indicies[j + enabledIndicies / 4] = (*currentBank)[i + 1].second[j];
 
+				for (int j = 0; j < enabledIndicies / 4; j++)
+					indicies[j + enabledIndicies / 2] = (*currentBank)[i].second[j] + diff;
 
-				std::array<uint32_t, 16> indicies = { 
-					aidx1, aidx2, aidx3, aidx4, bidx1, bidx2, bidx3, bidx4, 
-					aidx1 + diff, aidx2 + diff, aidx3 + diff, aidx4 + diff, 
-					bidx1 + diff, bidx2 + diff, bidx3 + diff, bidx4 + diff };
+				for (int j = 0; j < enabledIndicies / 4; j++)
+					indicies[j + (0.75) * enabledIndicies] = (*currentBank)[i + 1].second[j] + diff;
+					
+					//uint32_t aidx1 = nOrderMetaMetaMetapointIdxBank[i].second[0];
+					//uint32_t aidx2 = nOrderMetaMetaMetapointIdxBank[i].second[1];
+					//uint32_t aidx3 = nOrderMetaMetaMetapointIdxBank[i].second[2];
+					//uint32_t aidx4 = nOrderMetaMetaMetapointIdxBank[i].second[3];
+					//uint32_t bidx1 = nOrderMetaMetaMetapointIdxBank[i + 1].second[0];
+					//uint32_t bidx2 = nOrderMetaMetaMetapointIdxBank[i + 1].second[1];
+					//uint32_t bidx3 = nOrderMetaMetaMetapointIdxBank[i + 1].second[2];
+					//uint32_t bidx4 = nOrderMetaMetaMetapointIdxBank[i + 1].second[3];
 
-				std::sort(indicies.begin(), indicies.end());
-				auto x = std::adjacent_find(indicies.begin(), indicies.end());
+				
 
-				if (x != indicies.end())
+				 //= { 
+					//aidx1, aidx2, aidx3, aidx4, bidx1, bidx2, bidx3, bidx4, 
+					//aidx1 + diff, aidx2 + diff, aidx3 + diff, aidx4 + diff, 
+					//bidx1 + diff, bidx2 + diff, bidx3 + diff, bidx4 + diff };
+
+				std::sort(indicies.begin(), indicies.begin() + enabledIndicies);
+				auto x = std::adjacent_find(indicies.begin(), indicies.begin() + enabledIndicies);
+
+				if (x != indicies.begin() + enabledIndicies)
 				{
 					skipcount2++;
 					continue;
@@ -504,12 +547,12 @@ public:
 				break;
 			}
 						
-			std::sort(besti.begin(), besti.end());
+			std::sort(besti.begin(), besti.begin() + enabledIndicies/2);
 
-			bigint_t proof = HashReferencewPreload(roundInfo.get(), point_preload, 16, &besti[0]);
+			bigint_t proof = HashReferencewPreload(roundInfo.get(), point_preload, enabledIndicies, &besti[0]);
 
 			//Number of idx
-			k = 16;
+			k = enabledIndicies;
 #endif
 
 			double score=wide_as_double(BIGINT_WORDS, proof.limbs);
