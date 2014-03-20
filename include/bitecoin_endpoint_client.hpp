@@ -180,7 +180,7 @@ public:
 		double timeBudgetInital = timeBudget;
 
 		while(1){
-			unsigned Nss = 0.8 * std::max(timeBudget,0.) * hashrate;
+			unsigned Nss = 0.8 * std::max(timeBudget,0.) * hashrate/roundInfo->hashSteps;
 			if (Nss == 0)
 			{
 				break;
@@ -291,7 +291,7 @@ public:
 			double toc=now()*1e-9;	// Work out where we are against the deadline
 			if (timeBudget >= 0.4*timeBudgetInital)
 			{
-				hashrate = Nss/(std::max(toc-tic, 0.1));
+				hashrate = (Nss*roundInfo->hashSteps)/(std::max(toc-tic, 0.1));
 				Log(Log_Verbose, "New hashrate %g.", hashrate);
 			}
 
