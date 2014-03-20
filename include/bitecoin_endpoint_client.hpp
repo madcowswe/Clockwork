@@ -439,7 +439,7 @@ public:
 			unsigned skipcount1 = 0;
 
 			//Depth 2:
-			for (int i = 0; i < /*Nss - 2u - skipcount*/nOrderMetaMetapointIdxBank.size() - 1; i++)
+			for (int i = 0; i < ((int)nOrderMetaMetapointIdxBank.size() - 1); i++)
 			{
 				uint32_t aidx1 = nOrderMetaMetapointIdxBank[i].second[0];
 				uint32_t aidx2 = nOrderMetaMetapointIdxBank[i].second[1];
@@ -484,7 +484,7 @@ public:
 			unsigned skipcount2 = 0;
 			Log(Log_Verbose, "\n\Third loop\n\n");
 			
-			for (int i = 0; i < nOrderMetaMetaMetapointIdxBank.size() - 1; i++)
+			for (int i = 0; i < ((int) nOrderMetaMetaMetapointIdxBank.size()) - 1; i++)
 			{
 
 				uint32_t aidx1 = nOrderMetaMetaMetapointIdxBank[i].second[0];
