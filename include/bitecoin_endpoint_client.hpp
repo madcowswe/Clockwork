@@ -348,7 +348,7 @@ public:
 				}
 
 			double tic2 = now();
-			Log(Log_Verbose, "First loop:%g", (tic2 - tic1)*1e-9 );
+			Log(Log_Debug, "First loop:%g", (tic2 - tic1)*1e-9 );
 			
 			if (failcount > 0.20*Nss){
 				Log(Log_Verbose, "We failed to clear MSW %d times when filling Nss=%d", failcount, Nss);
@@ -364,7 +364,7 @@ public:
 
 			skipcount = 0;
 			//Depth 1:
-			for (unsigned i = 0; i < Nss - 1u; i++)
+			for (unsigned i = 0; i < (unsigned)std::max((int)Nss - 1, 0); i++)
 			{
 				uint32_t aidx =  nOrderMetapointIdxBank[i].second[0];
 				uint32_t bidx =  nOrderMetapointIdxBank[i + 1].second[0];
@@ -401,11 +401,11 @@ public:
 				nOrderMetaMetapointIdxBank.push_back(wip);
 
 			}
-			Log(Log_Verbose, "Second loop. Skipped %d", skipcount);
+			Log(Log_Debug, "Second loop. Skipped %d", skipcount);
 			std::sort(nOrderMetaMetapointIdxBank.begin(), nOrderMetaMetapointIdxBank.end());
 
 			std::vector<wide_idx_pair_4> nOrderMetaMetaMetapointIdxBank; 
-			nOrderMetaMetaMetapointIdxBank.reserve(std::max(((int) Nss) - 2 - ((int) skipcount), 0));
+			nOrderMetaMetaMetapointIdxBank.reserve(std::max((int)nOrderMetaMetapointIdxBank.size() - 1, 0));
 			
 			unsigned skipcount1 = 0;
 
@@ -451,11 +451,11 @@ public:
 
 			}
 
-			Log(Log_Verbose, "Third loop. Skipped %d", skipcount1);
+			Log(Log_Debug, "Third loop. Skipped %d", skipcount1);
 
 			std::sort(nOrderMetaMetaMetapointIdxBank.begin(), nOrderMetaMetaMetapointIdxBank.end());
 			unsigned skipcount2 = 0;
-			Log(Log_Verbose, "Third loop");
+			Log(Log_Debug, "Third loop");
 			
 			std::array<uint32_t, 16> besti;
 			bool bestivalid = 0;
@@ -507,7 +507,7 @@ public:
 			//}
 
 			//And now we do meta-meta points
-			Log(Log_Verbose, "Final pass: Skipped %u inclusive idx, Overload %u", skipcount2, overloadcount);
+			Log(Log_Debug, "Final pass: Skipped %u inclusive idx, Overload %u", skipcount2, overloadcount);
 			//Log(Log_Verbose, "\nAmazing tom\n");
 
 			if (!bestivalid)
