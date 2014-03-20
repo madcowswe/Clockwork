@@ -22,7 +22,7 @@
 #ifdef __CYGWIN__
 #warning No TBB on cygwin!
 #else
-#include <tbb/parallel_for.h>
+//#include <tbb/parallel_for.h>
 #endif
 
 //#define USECUDA
