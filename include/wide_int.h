@@ -79,6 +79,10 @@ std::pair<T1,T2> pairwise_xor(std::pair<T1,T2> a, std::pair<T1,T2> b){
 	return std::make_pair(a.first ^ b.first, a.second ^ b.second);
 }
 
+wide_as_pair wap_xor(wide_as_pair a, wide_as_pair b){
+	return std::make_pair(pairwise_xor(a.first, b.first), pairwise_xor(a.second, b.second));
+}
+
 /*! Add together two n-limb numbers, returning the carry limb.
 	\note the output can also be one of the inputs
 */
