@@ -30,7 +30,7 @@ namespace bitecoin{
 	// This provides a primitive randomness step. It is not cryptographic quality,
 	// but suffices for these purposes. There is a constant c that comes from the
 	// server at the beginning of the round that gets used here.
-	void PoolHashStep(bigint_t &x, const Packet_ServerBeginRound *pParams)
+	inline void PoolHashStep(bigint_t &x, const Packet_ServerBeginRound *pParams)
 	{
 		assert(NLIMBS==4*2);
 		

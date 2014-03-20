@@ -22,7 +22,7 @@
 #ifdef __CYGWIN__
 #warning No TBB on cygwin!
 #else
-//#include <tbb/parallel_for.h>
+#include <tbb/parallel_for.h>
 #endif
 
 //#define USECUDA
@@ -103,7 +103,7 @@ public:
 
 		//TODO: weak Seen set & strong GoldenDiff cache
 
-		unsigned Ngd = 1<<(16+1);
+		unsigned Ngd = 1<<(16+2);
 		std::vector<std::pair<uint64_t, uint32_t>> pointidxbank(Ngd);
 
 		std::random_device seeder;
@@ -115,36 +115,50 @@ public:
 		};
 
 		//for (unsigned i = 0; i < Ngd; i++)
-		auto genpts = [&](unsigned i)
-		{
-			uint32_t curridx = fastrand();
-			bigint_t point = point_preload;
-			point.limbs[0] = curridx;
 
-			for(unsigned j=0;j<roundInfo->hashSteps;j++){
-				PoolHashStep(point, roundInfo.get());
+		double difftic = now()*1e-9;
+
+#define BLOCKSIZE (1u<<12)
+
+		//auto genpts = [&](unsigned ii)
+		//{
+			//for (unsigned i = ii; i < std::min(i+BLOCKSIZE, Ngd); i++)
+			//{
+			for (unsigned i = 0; i < Ngd; i++)
+			{
+				uint32_t curridx = fastrand();
+				bigint_t point = point_preload;
+				point.limbs[0] = curridx;
+
+				for(unsigned j=0;j<roundInfo->hashSteps;j++){
+					//PoolHashStep(point, roundInfo.get());
+
+					bigint_t tmp;
+					// tmp=lo(x)*c;
+					wide_mul(4, tmp.limbs+4, tmp.limbs, point.limbs, roundInfo->c);
+					// [carry,lo(x)] = lo(tmp)+hi(x)
+					uint32_t carry=wide_add(4, point.limbs, tmp.limbs, point.limbs+4);
+					// hi(x) = hi(tmp) + carry
+					wide_add(4, point.limbs+4, tmp.limbs+4, carry);
+				}
+
+				uint64_t point64 = ((uint64_t)point.limbs[7] << 32) + point.limbs[6];
+				pointidxbank[i] = std::make_pair(point64, curridx);
 			}
 
-			uint64_t point64 = ((uint64_t)point.limbs[7] << 32) + point.limbs[6];
-			pointidxbank[i] = std::make_pair(point64, curridx);
+		//};
 
-		};
 
-		for (unsigned i = 0; i < Ngd; i++)
-		{
-			genpts(i);
-		};
-
-#ifdef __CYGWIN__ //no TBB on cygwin :(
-
-		for (unsigned i = 0; i < Ngd; i++)
-		{
-			genpts(i);
-		};
+#if 1 //def __CYGWIN__ //no TBB on cygwin :(
+		//for (unsigned ii = 0; ii < Ngd; ii+=BLOCKSIZE)
+		//{
+		//	genpts(ii);
+		//}
 #else
-		//tbb::parallel_for(0u, Ngd, 1u, genpts);
+		//tbb::parallel_for(0u, Ngd, BLOCKSIZE, genpts);
 #endif
 
+		double diffgent = now()*1e-9;
 
 		std::sort(pointidxbank.begin(), pointidxbank.end());
 
@@ -185,6 +199,10 @@ public:
 			}
 		}
 
+		double diffsortscant = now()*1e-9;
+
+		Log(Log_Verbose, "Diff generate: %g\t sort-scan: %g", diffgent-difftic, diffsortscant-diffgent);
+
 		//quick and dirty 2 idx solution in case we run out of time
 		uint32_t bsInitVSsucks[] = {0, GoldenDiff};
 		std::vector<uint32_t> bestSolution(bsInitVSsucks, bsInitVSsucks+2); //= {0, GoldenDiff};
@@ -218,6 +236,7 @@ public:
 			std::vector<std::pair<std::pair<uint64_t, uint64_t>, uint32_t>> metapointidxbank;
 			metapointidxbank.reserve(Nss);
 
+			double gentic = now()*1e-9;
 
 			std::uniform_int_distribution<uint32_t> uniform_baserange(0u, (uint32_t)(-1) - diff);
 			unsigned failcount = 0;
@@ -243,6 +262,9 @@ public:
 					failcount++;
 				}
 			}
+
+			double gentoc = now()*1e-9;
+			Log(Log_Debug, "Main generate: %g for Nss = %d", gentoc-gentic, Nss);
 
 			if (failcount > 0.20*Nss){
 				Log(Log_Verbose, "We failed to clear MSW %d times when filling Nss=%d", failcount, Nss);

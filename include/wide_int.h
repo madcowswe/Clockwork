@@ -140,7 +140,7 @@ uint32_t wide_sub(unsigned n, uint32_t *res, const uint32_t *a, const uint32_t *
 
 /*! Multiply two n-limb numbers to produce a 2n-limb result
 	\note All the integers must be distinct, the output cannot overlap the input */
-void wide_mul(unsigned n, uint32_t *res_hi, uint32_t *res_lo, const uint32_t *a, const uint32_t *b)
+inline void wide_mul(unsigned n, uint32_t *res_hi, uint32_t *res_lo, const uint32_t *a, const uint32_t *b)
 {
 	assert(res_hi!=a && res_hi!=b);
 	assert(res_lo!=a && res_lo!=b);
