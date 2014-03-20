@@ -331,7 +331,8 @@ public:
 			unsigned failcount = 0;
 
 			std::pair<uint64_t, uint64_t> bestmmpoint = std::make_pair(-1ull, -1ull);
-			std::pair<uint32_t, uint32_t> besti;
+			//std::pair<uint32_t, uint32_t> besti;
+			std::array<uint32_t, 16> besti;
 			unsigned skipcount = 0;
 			unsigned overloadcount = 0;
 			double tic1 = now();
@@ -435,10 +436,10 @@ public:
 			std::vector<wide_idx_pair_4> nOrderMetaMetaMetapointIdxBank; 
 			nOrderMetaMetaMetapointIdxBank.reserve(Nss - 2u - skipcount);
 			
-			skipcount = 0;
+			unsigned skipcount1 = 0;
 
 			//Depth 2:
-				for (unsigned i = 0; i < Nss - 2u - skipcount	; i++)
+			for (unsigned i = 0; i < Nss - 2u - skipcount	; i++)
 			{
 				uint32_t aidx1 = nOrderMetaMetapointIdxBank[i].second[0];
 				uint32_t aidx2 = nOrderMetaMetapointIdxBank[i].second[1];
@@ -451,16 +452,9 @@ public:
 				
 				if (x != indicies.end())
 				{
-					skipcount++;
+					skipcount1++;
 					continue;
 				}
-
-				//if (aidx1 == bidx1 || aidx1 == bidx1 + diff || aidx1 + diff == bidx1 || aidx1 == bidx2
-				//	|| aidx2 == bidx2 || aidx2 == bidx2 + diff || aidx2 + diff == bidx2 || aidx2 == bidx1)
-				//{
-				//	
-
-				//}
 
 				std::pair<uint64_t, uint64_t> a = nOrderMetaMetapointIdxBank[i].first.first;
 				std::pair<uint64_t, uint64_t> b = nOrderMetaMetapointIdxBank[i + 1].first.first;
@@ -486,17 +480,33 @@ public:
 
 			}
 
-			for (unsigned i = 0; i < Nss/*nOrderMetapointIdxBank.size()*/ - 1u; i++)
-			{
-				uint32_t aidx =  /*nOrderMetapointIdxBank[i].second.idx[0];*/ nOrderMetapointIdxBank[i].second[0];
-				uint32_t bidx =  /*nOrderMetapointIdxBank[i + 1].second.idx[0];*/ nOrderMetapointIdxBank[i + 1].second[0];
- 
+			std::sort(nOrderMetaMetaMetapointIdxBank.begin(), nOrderMetaMetaMetapointIdxBank.end());
+			unsigned skipcount2 = 0;
 
-				//uint32_t aidx =  nOrderMetapointIdxBank[i].second[0]; 
-				//uint32_t bidx =  nOrderMetapointIdxBank[i + 1].second[0]; 
-				if (aidx == bidx || aidx == bidx + diff || aidx + diff == bidx)
+			for (unsigned i = 0; i < Nss - 3u - skipcount1; i++)
+			{
+
+				uint32_t aidx1 = nOrderMetaMetaMetapointIdxBank[i].second[0];
+				uint32_t aidx2 = nOrderMetaMetaMetapointIdxBank[i].second[1];
+				uint32_t aidx3 = nOrderMetaMetaMetapointIdxBank[i].second[2];
+				uint32_t aidx4 = nOrderMetaMetaMetapointIdxBank[i].second[3];
+				uint32_t bidx1 = nOrderMetaMetaMetapointIdxBank[i + 1].second[0];
+				uint32_t bidx2 = nOrderMetaMetaMetapointIdxBank[i + 1].second[1];
+				uint32_t bidx3 = nOrderMetaMetaMetapointIdxBank[i + 1].second[2];
+				uint32_t bidx4 = nOrderMetaMetaMetapointIdxBank[i + 1].second[3];
+
+
+				std::array<uint32_t, 16> indicies = { 
+					aidx1, aidx2, aidx3, aidx4, bidx1, bidx2, bidx3, bidx4, 
+					aidx1 + diff, aidx2 + diff, aidx3 + diff, aidx4 + diff, 
+					bidx1 + diff, bidx2 + diff, bidx3 + diff, bidx4 + diff };
+
+				std::sort(indicies.begin(), indicies.end());
+				auto x = std::adjacent_find(indicies.begin(), indicies.end());
+
+				if (x != indicies.end())
 				{
-					skipcount++;
+					skipcount2++;
 					continue;
 				}
 
@@ -512,7 +522,7 @@ public:
 					}
 					else {
 						bestmmpoint = currmmpoint;
-						besti = std::make_pair(aidx, bidx);
+						besti = indicies;
 					}
 				}
 			}
@@ -523,16 +533,18 @@ public:
 
 			//And now we do meta-meta points
 
-			Log(Log_Debug, "Second pass: Skipped %u inclusive idx, Overload %u", skipcount, overloadcount);
+			Log(Log_Debug, "Second pass: Skipped %u inclusive idx, Overload %u", skipcount2, overloadcount);
+						
+			std::sort(besti.begin(), besti.end());
 
+			uint32_t amazing_tom[16];
+			for (int i = 0; i < 16; i++)
+				amazing_tom[i] = besti[i];
 
-			uint32_t bestidx[4] = { besti.first, besti.first + diff, besti.second, besti.second + diff };
-			std::sort(bestidx, bestidx + 4);
-
-			bigint_t proof = HashReferencewPreload(roundInfo.get(), point_preload, 4, bestidx);
+			bigint_t proof = HashReferencewPreload(roundInfo.get(), point_preload, 16, amazing_tom);
 
 			//Number of idx
-			k = 4;
+			k = 16;
 
 
 #endif
@@ -778,7 +790,7 @@ public:
 			if(wide_compare(BIGINT_WORDS, proof.limbs, bestProof.limbs)<0){
 				double leadingzeros = 256 - log(score) * 1.44269504088896340736; //log2(e)
 				Log(Log_Verbose, "    Found new best, nTrials=%d, score=%lg, leading zeros=%lg.", nTrials, score, leadingzeros);
-				std::vector<uint32_t> resvec(bestidx, bestidx+k);
+				std::vector<uint32_t> resvec(amazing_tom, amazing_tom + k);
 				bestSolution = resvec;
 				bestProof=proof;
 			}
