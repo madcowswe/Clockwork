@@ -26,13 +26,10 @@
 
 //#define SECONDSORT
 #define GENERICSORT
-//#define HR2BANKED
-//#define POSTDIFF2BRUTE
-//#define HR2BANKED_DEGEN
-//#define HRkBANKED
-//#define HRCUDA
 
-#ifdef HRCUDA
+//#define USECUDA
+
+#ifdef USECUDA
 #include <cuda_runtime.h>
 int testcuda();
 
@@ -191,7 +188,7 @@ public:
 		double timeBudgetInital = timeBudget;
 
 		while(1){
-			unsigned Nss = 0.8 * std::max(timeBudget,0.) * hashrate;
+			unsigned Nss = 0.8 * std::max(timeBudget,0.) * hashrate/roundInfo->hashSteps;
 			if (Nss == 0)
 			{
 				break;
@@ -208,32 +205,6 @@ public:
 			std::vector<std::pair<std::pair<uint64_t, uint64_t>, uint32_t>> metapointidxbank;
 			metapointidxbank.reserve(Nss);
 
-#ifdef USE_THIS_IF_WE_KEEP_WORD_5_FROM_GOLDEN_DIFF_FIND
-			auto addIfMSWClear = [&](unsigned i, uint32_t idxtoadd){
-				bigint_t point = point_preload;
-				point.limbs[0] = idxtoadd;
-
-				for(unsigned j=0;j<roundInfo->hashSteps;j++){
-					PoolHashStep(point, roundInfo.get());
-				}
-
-				bigint_t metapoint;
-				wide_xor(8, metapoint.limbs, pointidxbank[i]
-			};
-
-			for (int i = 0; i < N && metapointidxbank.size() <= N-2; i++)
-			{
-				int64_t overidx = (int64_t)pointidxbank[i].second + (int64_t)diff;
-				if(overidx < (1ll << 32)){
-					addIfMSWClear(i, (uint32_t)overidx);
-				}
-
-				int64_t underidx = (int64_t)pointidxbank[i].second - (int64_t)diff;
-				if((int64_t)pointidxbank[i].second - (int64_t)diff >= 0){
-					addIfMSWClear(i, (uint32_t)underidx);
-				}
-			}
-#endif
 
 			std::uniform_int_distribution<uint32_t> uniform_baserange(0u, (uint32_t)(-1) - diff);
 			unsigned failcount = 0;
@@ -316,7 +287,6 @@ public:
 			//Number of idx
 			k = 4;
 
-
 #endif
 
 #ifdef GENERICSORT
@@ -332,7 +302,7 @@ public:
 
 			std::pair<uint64_t, uint64_t> bestmmpoint = std::make_pair(-1ull, -1ull);
 			//std::pair<uint32_t, uint32_t> besti;
-			std::array<uint32_t, 16> besti;
+
 			unsigned skipcount = 0;
 			unsigned overloadcount = 0;
 			double tic1 = now();
@@ -378,7 +348,7 @@ public:
 				}
 
 			double tic2 = now();
-			Log(Log_Verbose, "\n\nFirst loop:%d\n\n", (tic2 - tic1)*1e-9 );
+			Log(Log_Verbose, "First loop:%g", (tic2 - tic1)*1e-9 );
 			
 			if (failcount > 0.20*Nss){
 				Log(Log_Verbose, "We failed to clear MSW %d times when filling Nss=%d", failcount, Nss);
@@ -392,6 +362,7 @@ public:
 			std::vector<wide_idx_pair_2> nOrderMetaMetapointIdxBank;
 			nOrderMetaMetapointIdxBank.reserve(std::max(((int)Nss)-1,0));
 
+			skipcount = 0;
 			//Depth 1:
 			for (unsigned i = 0; i < Nss - 1u; i++)
 			{
@@ -404,7 +375,7 @@ public:
 
 				if (x != indicies.end())
 				{
-					//Log(Log_Verbose, "\n\Skipped index:%d\n\n", i);
+					//Log(Log_Verbose, "Skipped index:%d", i);
 					skipcount++;
 					continue;
 				}
@@ -430,7 +401,7 @@ public:
 				nOrderMetaMetapointIdxBank.push_back(wip);
 
 			}
-			Log(Log_Verbose, "\n\nSecond loop\n\n");
+			Log(Log_Verbose, "Second loop. Skipped %d", skipcount);
 			std::sort(nOrderMetaMetapointIdxBank.begin(), nOrderMetaMetapointIdxBank.end());
 
 			std::vector<wide_idx_pair_4> nOrderMetaMetaMetapointIdxBank; 
@@ -480,10 +451,14 @@ public:
 
 			}
 
+			Log(Log_Verbose, "Third loop. Skipped %d", skipcount1);
+
 			std::sort(nOrderMetaMetaMetapointIdxBank.begin(), nOrderMetaMetaMetapointIdxBank.end());
 			unsigned skipcount2 = 0;
-			Log(Log_Verbose, "\n\nThird loop\n\n");
+			Log(Log_Verbose, "Third loop");
 			
+			std::array<uint32_t, 16> besti;
+			bool bestivalid = 0;
 			for (int i = 0; i < ((int) nOrderMetaMetaMetapointIdxBank.size()) - 1; i++)
 			{
 
@@ -524,265 +499,28 @@ public:
 					else {
 						bestmmpoint = currmmpoint;
 						besti = indicies;
+						bestivalid = 1;
 					}
 				}
 			}
-
-			
 
 			//}
 
 			//And now we do meta-meta points
-			Log(Log_Verbose, "\nAmazing tom\n");
-			Log(Log_Debug, "Second pass: Skipped %u inclusive idx, Overload %u", skipcount2, overloadcount);
+			Log(Log_Verbose, "Final pass: Skipped %u inclusive idx, Overload %u", skipcount2, overloadcount);
+			//Log(Log_Verbose, "\nAmazing tom\n");
+
+			if (!bestivalid)
+			{
+				break;
+			}
 						
 			std::sort(besti.begin(), besti.end());
 
-			uint32_t amazing_tom[16];
-			for (int i = 0; i < 16; i++)
-				amazing_tom[i] = besti[i];
-
-			bigint_t proof = HashReferencewPreload(roundInfo.get(), point_preload, 16, amazing_tom);
+			bigint_t proof = HashReferencewPreload(roundInfo.get(), point_preload, 16, &besti[0]);
 
 			//Number of idx
 			k = 16;
-
-
-#endif
-
-#ifdef POSTDIFF2BRUTE
-			unsigned diff = GoldenDiff;//0x94632009;//GoldenDiff;
-			unsigned N = 10000;
-
-			std::vector<uint32_t> idxbank;
-			idxbank.resize(N);
-
-			//Generate point for each index pair
-			std::vector<uint64_t> pointbanks[2];
-			pointbanks[0].resize(N);
-			pointbanks[1].resize(N);
-			std::vector<metapoint> idx_mpoint_bank;
-			idx_mpoint_bank.resize(N);
-
-			unsigned randoverhead = 0;
-			for (unsigned i = 0; i < N; ++i)
-			{
-				
-				//HACK, use a proper uniform distr
-				while((idxbank[i] = fastrand()) > (uint32_t)(-1) - diff)
-					randoverhead++;
-
-				for (unsigned currbank = 0; currbank < 2; ++currbank)
-				{
-					bigint_t point = point_preload;
-					point.limbs[0] = idxbank[i] + currbank*diff;
-
-					// Now step forward by the number specified by the server
-					for (unsigned j = 0; j<roundInfo->hashSteps; j++){
-						//Needs to become 64 bit (upper 2 MSW)
-						PoolHashStep(point, roundInfo.get());
-					}
-
-					pointbanks[currbank][i] = ((uint64_t)point.limbs[7] << 32) + point.limbs[6];
-				}
-
-				//XOR point pair to make meta-point and put in bank
-				idx_mpoint_bank[i].lower_index = idxbank[i];
-				idx_mpoint_bank[i].value = pointbanks[1][i] ^ pointbanks[0][i];
-
-			}
-
-			Log(Log_Debug, "Randoverhead was %g\%", (double)randoverhead/N);
-			
-			//XOR meta-points and find minimum
-			uint32_t bestIndex[2] = {0, 0}; //init to get rid of warnings
-			uint64_t currentMin = -1;
-			uint64_t currentValue;
-
-			for (unsigned i = 0; i < N; ++i)
-			{
-				for (int j = 0; j < (int)i - 1; ++j)
-				{
-					if ((int)i == j)
-						assert(false);
-
-					//Check indicies are distinct, if not, skip
-					if (idx_mpoint_bank[i].lower_index == idx_mpoint_bank[j].lower_index || idx_mpoint_bank[i].lower_index + diff == idx_mpoint_bank[j].lower_index || idx_mpoint_bank[j].lower_index + diff == idx_mpoint_bank[i].lower_index)
-						continue;
-
-					currentValue = idx_mpoint_bank[i].value ^ idx_mpoint_bank[j].value;
-
-					if (currentValue < currentMin)
-					{
-						bestIndex[0] = idx_mpoint_bank[i].lower_index;
-						bestIndex[1] = idx_mpoint_bank[j].lower_index;
-						currentMin = currentValue;
-					}
-				}
-			}
-
-			uint32_t bestidx[4] = { bestIndex[0], bestIndex[0] + diff, bestIndex[1], bestIndex[1] + diff};
-			std::sort(bestidx, bestidx+4);
-			
-			bigint_t proof = HashReferencewPreload(roundInfo.get(), point_preload, 4, bestidx);
-
-			//Number of banks
-			unsigned k = 4;
-
-#endif
-
-
-#ifdef HR2BANKED
-
-			unsigned N = 10000;
-			std::vector<uint32_t> idxbanks[2];
-			idxbanks[0].reserve(N);
-			idxbanks[1].reserve(N);
-
-			for (unsigned i = 0; i < N; ++i)
-			{
-				idxbanks[0][i] = rand()/2;
-			}
-
-			for (unsigned i = 0; i < N; ++i)
-			{
-				idxbanks[1][i] = rand()/2 + (1<<31);
-			}
-
-			unsigned besti, bestj;
-			HashReference2Banked(roundInfo.get(), point_preload, N, idxbanks, besti, bestj, 7);
-
-			uint32_t bestidx[2] = {idxbanks[0][bestj], idxbanks[1][besti]};
-			bigint_t proof=HashReferencewPreload(roundInfo.get(), point_preload, 2, bestidx);//, m_log);
-
-			unsigned k = 2;
-#endif
-#ifdef HR2SINGLEBANK
-			//TODO: Find golden diff using standard
-#endif
-#ifdef HR2BANKED_DEGEN
-
-			unsigned N = 10000;
-			std::vector<uint32_t> idxbanks[2];
-			idxbanks[0].reserve(N);
-			idxbanks[1].reserve(N);
-
-			for (unsigned i = 0; i < N; ++i)
-			{
-				idxbanks[0][i] = rand()/2;
-				idxbanks[1][i] = idxbanks[0][i] + 0x94632009;
-			}
-
-			unsigned besti, bestj;
-			HashReference2Banked(roundInfo.get(), point_preload, N, idxbanks, besti, bestj, 6);
-
-			uint32_t bestidx[2] = {idxbanks[0][bestj], idxbanks[1][besti]};
-			bigint_t proof=HashReferencewPreload(roundInfo.get(), point_preload, 2, bestidx);//, m_log);
-
-			unsigned k = 2;
-#endif
-#ifdef HRkBANKED
-
-			#define kpow 2
-			#define ALLOC_k (1u<<kpow)
-
-			unsigned k = std::min((1u<<kpow), roundInfo->maxIndices);
-			unsigned N = 1<<(28/k);
-			unsigned subspace_size = 1<<(32-kpow);
-
-			std::vector<uint32_t> idxbanks[ALLOC_k];
-			for (unsigned i = 0; i < k; ++i)
-			{
-				idxbanks[i].reserve(N);
-			}
-
-			for (unsigned i = 0; i < k; ++i)
-			{
-				for (unsigned j = 0; j < N; ++j)
-				{
-					idxbanks[i].push_back((rand() & (subspace_size-1)) + i*subspace_size);
-					//fprintf(stderr, "gen: bank %u\ti %u\tval %#x\n", i, j, idxbanks[i][j]);
-				}
-			}
-
-			unsigned besti[ALLOC_k];
-			HashReferencekBanked<ALLOC_k>(roundInfo.get(), point_preload, N, k, idxbanks, besti);
-
-			uint32_t bestidx[ALLOC_k];
-			for (unsigned i = 0; i < k; ++i)
-			{
-				bestidx[i] = idxbanks[i][besti[i]];
-				//fprintf(stderr, "select: bank %u\ti %u\tval %#x\n", i, besti[i], bestidx[i]);
-			}
-			bigint_t proof=HashReferencewPreload(roundInfo.get(), point_preload, k, bestidx);
-
-#endif
-#ifdef HRCUDA
-			cudaError e;
-
-			#define blocks 6
-			#define threadsPerBlock 1024
-			#define N 128
-			size_t banksizeBytes = N*sizeof(uint32_t);
-
-			uint32_t staticidx[blocks*threadsPerBlock];
-			uint32_t regidx[N];
-			uint32_t sharedidx2[N];
-			uint32_t sharedidx1[N];
-			uint32_t staticpoints[blocks*threadsPerBlock];
-			uint32_t regpoints[N];
-			uint32_t sharedpoints2[N];
-			uint32_t sharedpoints1[N];
-
-			unsigned subspace_size = 1<<30;
-			for (int i = 0; i < blocks*threadsPerBlock; ++i){
-				staticidx[i] = (rand() & (subspace_size-1)) + 3*subspace_size;
-			}
-			for (int i = 0; i < N; ++i){
-				regidx[i] = (rand() & (subspace_size-1)) + 2*subspace_size;
-			}
-			for (int i = 0; i < N; ++i){
-				sharedidx2[i] = (rand() & (subspace_size-1)) + 1*subspace_size;
-			}
-			for (int i = 0; i < N; ++i){
-				sharedidx1[i] = (rand() & (subspace_size-1)) + 0*subspace_size;
-			}
-
-			pointsFromIdx(roundInfo.get(), point_preload, blocks*threadsPerBlock, staticidx, staticpoints);
-			pointsFromIdx(roundInfo.get(), point_preload, N, regidx, regpoints);
-			pointsFromIdx(roundInfo.get(), point_preload, N, sharedidx2, sharedpoints2);
-			pointsFromIdx(roundInfo.get(), point_preload, N, sharedidx1, sharedpoints1);
-
-			uint32_t* staticbank_GPU, *regbank_GPU, *sharedbank1_GPU, *sharedbank2_GPU;
-			if(e = cudaMalloc(&staticbank_GPU, blocks*threadsPerBlock*sizeof(uint32_t))) fprintf(stderr, "Cuda error %d on line %d\n", e, __LINE__);
-			if(e = cudaMalloc(&regbank_GPU, banksizeBytes)) fprintf(stderr, "Cuda error %d on line %d\n", e, __LINE__);
-			if(e = cudaMalloc(&sharedbank2_GPU, banksizeBytes)) fprintf(stderr, "Cuda error %d on line %d\n", e, __LINE__);
-			if(e = cudaMalloc(&sharedbank1_GPU, banksizeBytes)) fprintf(stderr, "Cuda error %d on line %d\n", e, __LINE__);
-
-			if(e = cudaMemcpy(staticbank_GPU, staticpoints, blocks*threadsPerBlock*sizeof(uint32_t), cudaMemcpyHostToDevice)) fprintf(stderr, "Cuda error %d on line %d\n", e, __LINE__);
-			if(e = cudaMemcpy(regbank_GPU, regpoints, banksizeBytes, cudaMemcpyHostToDevice)) fprintf(stderr, "Cuda error %d on line %d\n", e, __LINE__);
-			if(e = cudaMemcpy(sharedbank2_GPU, sharedpoints2, banksizeBytes, cudaMemcpyHostToDevice)) fprintf(stderr, "Cuda error %d on line %d\n", e, __LINE__);
-			if(e = cudaMemcpy(sharedbank1_GPU, sharedpoints1, banksizeBytes, cudaMemcpyHostToDevice)) fprintf(stderr, "Cuda error %d on line %d\n", e, __LINE__);
-
-			int* bestiBuff_GPU;
-			if(e = cudaMalloc(&bestiBuff_GPU, 4*1024*sizeof(int))) fprintf(stderr, "Cuda error %d on line %d\n", e, __LINE__);
-
-			__device__ int theHeadPtr_GPU;
-			if(e = cudaMemset(&theHeadPtr_GPU, 0, sizeof(int))) fprintf(stderr, "Cuda error %d on line %d\n", e, __LINE__);
-			//int z = 0;
-			//cudaMemcpyToSymbol(&theHeadPtr_GPU, &z, sizeof(int));
-
-			cudaDeviceSetCacheConfig(cudaFuncCachePreferShared);
-
-			//TODO Make N variable
-
-			Clockwork_wrapper (staticbank_GPU, regbank_GPU, sharedbank2_GPU, sharedbank1_GPU, bestiBuff_GPU, &theHeadPtr_GPU, blocks, threadsPerBlock);
-
-
-			
-			bigint_t proof; // = TODO
-			uint32_t bestidx[4]; //TODO, change this!
-			unsigned k = 4;
 #endif
 
 			double score=wide_as_double(BIGINT_WORDS, proof.limbs);
@@ -791,7 +529,7 @@ public:
 			if(wide_compare(BIGINT_WORDS, proof.limbs, bestProof.limbs)<0){
 				double leadingzeros = 256 - log(score) * 1.44269504088896340736; //log2(e)
 				Log(Log_Verbose, "    Found new best, nTrials=%d, score=%lg, leading zeros=%lg.", nTrials, score, leadingzeros);
-				std::vector<uint32_t> resvec(amazing_tom, amazing_tom + k);
+				std::vector<uint32_t> resvec(&besti[0], &besti[0] + k);
 				bestSolution = resvec;
 				bestProof=proof;
 			}
@@ -799,7 +537,7 @@ public:
 			double toc=now()*1e-9;	// Work out where we are against the deadline
 			if (timeBudget >= 0.4*timeBudgetInital)
 			{
-				hashrate = Nss/(std::max(toc-tic, 0.1));
+				hashrate = (Nss*roundInfo->hashSteps)/(std::max(toc-tic, 0.1));
 				Log(Log_Verbose, "New hashrate %g.", hashrate);
 			}
 
@@ -825,7 +563,7 @@ public:
 	void Run()
 	{
 		try{
-			#ifdef HRCUDA
+			#ifdef USECUDA
 			Log(Log_Info, "Testing CUDA");
 			testcuda();
 			#endif

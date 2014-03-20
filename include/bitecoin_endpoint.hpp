@@ -12,6 +12,7 @@
 
 #include "bitecoin_log.hpp"
 #include "bitecoin_protocol.hpp"
+#include <string>
 
 namespace bitecoin{
 	
@@ -52,8 +53,13 @@ protected:
 		std::shared_ptr<Packet> packet=Packet::Recv(m_conn.get());
 		
 		std::shared_ptr<T> res=std::dynamic_pointer_cast<T>(packet);
-		if(!res)
+		if(!res){
+			auto epack = std::dynamic_pointer_cast<Packet_ServerError>(packet);
+			if(epack){
+				fprintf(stderr, "Server error=%s", epack->errorMessage.c_str());
+			}
 			Throw<std::runtime_error>()<<"Endpoint::RecvPacket - Expected packet of type "<<typeid(T).name()<<" but got "<<typeid(*packet).name()<<".";
+		}
 		return res;
 	}
 	
