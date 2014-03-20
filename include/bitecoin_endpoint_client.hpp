@@ -108,6 +108,8 @@ public:
 			return uniform_distr(rand_engine);
 		};
 
+		double difftic = now()*1e-9;
+
 		for (unsigned i = 0; i < Ngd; i++)
 		{
 			uint32_t curridx = fastrand();
@@ -122,6 +124,8 @@ public:
 			pointidxbank[i] = std::make_pair(point64, curridx);
 
 		}
+
+		double diffgent = now()*1e-9;
 
 		std::sort(pointidxbank.begin(), pointidxbank.end());
 
@@ -161,6 +165,9 @@ public:
 				}
 			}
 		}
+
+		double diffsortscant = now()*1e-9;
+		Log(Log_Verbose, "Diff generate: %g\t sort-scan: %g", diffgent-difftic, diffsortscant-diffgent);
 
 		//quick and dirty 2 idx solution in case we run out of time
 		uint32_t bsInitVSsucks[] = {0, GoldenDiff};
