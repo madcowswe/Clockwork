@@ -300,52 +300,48 @@ public:
 			std::uniform_int_distribution<uint32_t> uniform_baserange(0u, (uint32_t)(-1) - diff);
 			unsigned failcount = 0;
 
-			wide_as_pair bestmmpoint = std::make_pair(std::make_pair(-1ull, -1ull), std::make_pair(-1ull, -1ull));
-			//std::pair<uint32_t, uint32_t> besti;
-
 			unsigned skipcount = 0;
 			unsigned overloadcount = 0;
 			double tic1 = now();
-			//for (int depth = 0; depth < 1; depth++){
 
-				//0 depth:	Generate indicies
-				//			Generate points from indicies
-				//			XOR to make meta-points
-				//			Put metapoints and indicies into bank (1 base 1 implied)
-				//			Sort
-				//1 depth:	Take meta-points and indicies
-				//			XOR to make meta-meta points store indicies (2 base - 2 implied)
-				//			Sort
-				//2 depth:	Take meta-meta points and indicies 4 base - 4 implied
-				//			XOR to make meta^3-points
-				//			Sort
-				//
+			//0 depth:	Generate indicies
+			//			Generate points from indicies
+			//			XOR to make meta-points
+			//			Put metapoints and indicies into bank (1 base 1 implied)
+			//			Sort
+			//1 depth:	Take meta-points and indicies
+			//			XOR to make meta-meta points store indicies (2 base - 2 implied)
+			//			Sort
+			//2 depth:	Take meta-meta points and indicies 4 base - 4 implied
+			//			XOR to make meta^3-points
+			//			Sort
+			//
 
-				for (unsigned i = 0; i < Nss; i++)
-				{
-					uint32_t idx1 = uniform_baserange(rand_engine);
-					bigint_t point1 = pointFromIdx(roundInfo.get(), point_preload, idx1);
+			for (unsigned i = 0; i < Nss; i++)
+			{
+				uint32_t idx1 = uniform_baserange(rand_engine);
+				bigint_t point1 = pointFromIdx(roundInfo.get(), point_preload, idx1);
 
-					uint32_t idx2 = idx1 + diff;
-					bigint_t point2 = pointFromIdx(roundInfo.get(), point_preload, idx2);
+				uint32_t idx2 = idx1 + diff;
+				bigint_t point2 = pointFromIdx(roundInfo.get(), point_preload, idx2);
 
-					bigint_t metapoint;
-					wide_xor(8, metapoint.limbs, point1.limbs, point2.limbs);
+				bigint_t metapoint;
+				wide_xor(8, metapoint.limbs, point1.limbs, point2.limbs);
 
-					wide_idx_pair_1 newMetapoint;
+				wide_idx_pair_1 newMetapoint;
 
-					newMetapoint.first.first = std::make_pair(
-						((uint64_t)metapoint.limbs[7] << 32) + metapoint.limbs[6],
-						((uint64_t)metapoint.limbs[5] << 32) + metapoint.limbs[4]);
+				newMetapoint.first.first = std::make_pair(
+					((uint64_t)metapoint.limbs[7] << 32) + metapoint.limbs[6],
+					((uint64_t)metapoint.limbs[5] << 32) + metapoint.limbs[4]);
 
-					newMetapoint.first.second = std::make_pair(
-						((uint64_t)metapoint.limbs[3] << 32) + metapoint.limbs[2],
-						((uint64_t)metapoint.limbs[1] << 32) + metapoint.limbs[0]);
+				newMetapoint.first.second = std::make_pair(
+					((uint64_t)metapoint.limbs[3] << 32) + metapoint.limbs[2],
+					((uint64_t)metapoint.limbs[1] << 32) + metapoint.limbs[0]);
 
-					newMetapoint.second[0] = idx1;
+				newMetapoint.second[0] = idx1;
 
-					nOrderMetapointIdxBank.push_back(newMetapoint);
-				}
+				nOrderMetapointIdxBank.push_back(newMetapoint);
+			}
 
 			double tic2 = now();
 			Log(Log_Debug, "First loop:%g", (tic2 - tic1)*1e-9 );
@@ -448,6 +444,7 @@ public:
 			unsigned skipcount2 = 0;
 			Log(Log_Debug, "Third loop");
 			
+			wide_as_pair bestmmpoint = std::make_pair(std::make_pair(-1ull, -1ull), std::make_pair(-1ull, -1ull));
 			std::array<uint32_t, 16> besti;
 			bool bestivalid = 0;
 			for (int i = 0; i < ((int) nOrderMetaMetaMetapointIdxBank.size()) - 1; i++)
