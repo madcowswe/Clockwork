@@ -6,7 +6,10 @@ CPPFLAGS += -std=c++11 -W -Wall -g -MMD
 CPPFLAGS += -O3
 CPPFLAGS += -I include -I src
 
-LDLIBS = -lm -ltbb
+LDLIBS = -lm
+
+#TODO: Uncomment when not using Cygwin
+#LDLIBS += -ltbb
 
 # For your makefile, add TBB and OpenCL as appropriate
 #

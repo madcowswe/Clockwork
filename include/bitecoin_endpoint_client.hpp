@@ -19,7 +19,11 @@
 
 #include <random>
 
+#ifdef __CYGWIN__
+#warning No TBB on cygwin!
+#else
 #include <tbb/parallel_for.h>
+#endif
 
 //#define USECUDA
 
@@ -126,7 +130,21 @@ public:
 
 		};
 
-		tbb::parallel_for(0u, Ngd, 1u, genpts);
+		for (unsigned i = 0; i < Ngd; i++)
+		{
+			genpts(i);
+		};
+
+#ifdef __CYGWIN__ //no TBB on cygwin :(
+
+		for (unsigned i = 0; i < Ngd; i++)
+		{
+			genpts(i);
+		};
+#else
+		//tbb::parallel_for(0u, Ngd, 1u, genpts);
+#endif
+
 
 		std::sort(pointidxbank.begin(), pointidxbank.end());
 
