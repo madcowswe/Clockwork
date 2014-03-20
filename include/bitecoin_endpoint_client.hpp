@@ -378,7 +378,7 @@ public:
 				}
 
 			double tic2 = now();
-			Log(Log_Verbose, "\n\nFirst loop:%d\n\n", (tic2 - tic1)*1e-9 );
+			//Log(Log_Verbose, "\n\nFirst loop:%d\n\n", (tic2 - tic1)*1e-9 );
 			
 			if (failcount > 0.20*Nss){
 				Log(Log_Verbose, "We failed to clear MSW %d times when filling Nss=%d", failcount, Nss);
@@ -404,7 +404,7 @@ public:
 
 				if (x != indicies.end())
 				{
-					Log(Log_Verbose, "\n\Skipped index:%d\n\n", i);
+					//Log(Log_Verbose, "\n\Skipped index:%d\n\n", i);
 					skipcount++;
 					continue;
 				}
@@ -483,7 +483,8 @@ public:
 			std::sort(nOrderMetaMetaMetapointIdxBank.begin(), nOrderMetaMetaMetapointIdxBank.end());
 			unsigned skipcount2 = 0;
 
-			for (unsigned i = 0; i < Nss - 3u - skipcount1; i++)
+			//4u seems to work better - WHY?
+			for (unsigned i = 0; i < nOrderMetaMetaMetapointIdxBank.size() - 1u; i++)
 			{
 
 				uint32_t aidx1 = nOrderMetaMetaMetapointIdxBank[i].second[0];
