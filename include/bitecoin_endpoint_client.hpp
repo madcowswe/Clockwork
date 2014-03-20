@@ -108,12 +108,9 @@ public:
 			return uniform_distr(rand_engine);
 		};
 
-		std::vector<uint32_t> idxbank(Ngd);
-
 		for (unsigned i = 0; i < Ngd; i++)
 		{
 			uint32_t curridx = fastrand();
-			idxbank[i] = curridx;
 
 			bigint_t point = point_preload;
 			point.limbs[0] = curridx;
@@ -126,12 +123,6 @@ public:
 			pointidxbank[i] = std::make_pair(point64, curridx);
 
 		}
-
-		/*std::vector<wide_as_pair> ptest = genpoints_on_GPU(
-			roundInfo->hashSteps, roundInfo->c,
-			point_preload.limbs,
-			idxbank
-		);*/
 
 		std::sort(pointidxbank.begin(), pointidxbank.end());
 
@@ -202,18 +193,13 @@ public:
 			Log(Log_Debug, "Trial %d.", nTrials);
 
 			unsigned diff = GoldenDiff;//0x94632009;
+			std::uniform_int_distribution<uint32_t> uniform_baserange(0u, (uint32_t)(-1) - diff);
+
+#ifndef USECUDA
+			
 			std::vector<std::pair<std::pair<uint64_t, uint64_t>, uint32_t>> metapointidxbank;
 			metapointidxbank.reserve(Nss);
 
-			//TODO
-
-			std::vector<wide_as_pair> ptest = genpoints_on_GPU(
-				roundInfo->hashSteps, roundInfo->c,
-				point_preload.limbs,
-				idxbank
-			);
-
-			std::uniform_int_distribution<uint32_t> uniform_baserange(0u, (uint32_t)(-1) - diff);
 			unsigned failcount = 0;
 			while (metapointidxbank.size() < Nss)
 			{
@@ -244,10 +230,37 @@ public:
 					Log(Log_Verbose, "Second pass: Not enough MSW clear: Override!!!!");
 				}
 			}
+#else
+
+			//GPU
+
+			std::vector<std::pair<wide_as_pair, uint32_t>> metapointidxbank;
+			metapointidxbank.reserve(Nss);
+
+			std::vector<uint32_t> idxbank(Nss*2);
+			for (int i = 0; i < Nss; i += 2)
+			{
+				idxbank[i] = uniform_baserange(rand_engine);
+				idxbank[i+1] = idxbank[i] + diff;
+			}
+
+			std::vector<wide_as_pair> pointbank = genpoints_on_GPU(
+				roundInfo->hashSteps, roundInfo->c,
+				point_preload.limbs,
+				idxbank
+			);
+
+			for (int i = 0; i < Nss; i += 2)
+			{
+				metapointidxbank.push_back(std::make_pair(pairwise_xor2(pointbank[i], pointbank[i+1]), idxbank[i]));
+			}
+
+
+#endif
 
 			std::sort(metapointidxbank.begin(), metapointidxbank.end());
 
-			std::pair<uint64_t, uint64_t> bestmmpoint = std::make_pair(-1ull, -1ull);
+			wide_as_pair bestmmpoint = std::make_pair(std::make_pair(-1ull, -1ull),std::make_pair(-1ull, -1ull));
 			std::pair<uint32_t, uint32_t> besti;
 			bool bestivalid = 0;
 			unsigned skipcount = 0;
@@ -262,9 +275,9 @@ public:
 					continue;
 				}
 
-				std::pair<uint64_t, uint64_t> a = metapointidxbank[i].first;
-				std::pair<uint64_t, uint64_t> b = metapointidxbank[i+1].first;
-				std::pair<uint64_t, uint64_t> currmmpoint = pairwise_xor(a,b);
+				wide_as_pair a = metapointidxbank[i].first;
+				wide_as_pair b = metapointidxbank[i+1].first;
+				wide_as_pair currmmpoint = pairwise_xor2(a,b);
 
 				if (currmmpoint <= bestmmpoint)
 				{
