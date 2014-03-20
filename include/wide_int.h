@@ -26,8 +26,13 @@ wide_as_pair;
 //	typedef std::pair<wide_as_pair, idxarr<k>> type;
 //};
 
-typedef std::pair<wide_as_pair, std::vector<uint32_t>*> wide_idx_pair;
 
+//typedef std::pair<wide_as_pair, std::vector<uint32_t>*> wide_idx_pair;
+
+//You cannot template a typedef David
+typedef std::pair<wide_as_pair, std::array<uint32_t, 1>> wide_idx_pair_1;
+typedef std::pair<wide_as_pair, std::array<uint32_t, 2>> wide_idx_pair_2;
+typedef std::pair<wide_as_pair, std::array<uint32_t, 4>> wide_idx_pair_4;
 
 /*! Simply library for maintaining large positive integers as an array
 	of 32-bit limbs */
