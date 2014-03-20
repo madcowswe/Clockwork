@@ -477,10 +477,7 @@ public:
 					continue;
 				}
 
-				auto a = nOrderMetapointIdxBank[i].first;
-				auto b = nOrderMetapointIdxBank[i + 1].first;
-				auto currmmpoint = wap_xor(a, b);
-				//std::pair<uint64_t, uint64_t> currmmpoint = pairwise_xor(a, b);
+				auto currmmpoint = wap_xor(nOrderMetapointIdxBank[i].first, nOrderMetapointIdxBank[i + 1].first);
 
 				if (currmmpoint <= bestmmpoint)
 				{
