@@ -351,7 +351,7 @@ public:
 				//			Sort
 				//
 
-				for (int i = 0; i < Nss; i++)
+				for (unsigned i = 0; i < Nss; i++)
 				{
 					uint32_t idx1 = uniform_baserange(rand_engine);
 					bigint_t point1 = pointFromIdx(roundInfo.get(), point_preload, idx1);
@@ -430,7 +430,7 @@ public:
 				nOrderMetaMetapointIdxBank.push_back(wip);
 
 			}
-			Log(Log_Verbose, "\n\Second loop\n\n");
+			Log(Log_Verbose, "\n\nSecond loop\n\n");
 			std::sort(nOrderMetaMetapointIdxBank.begin(), nOrderMetaMetapointIdxBank.end());
 
 			std::vector<wide_idx_pair_4> nOrderMetaMetaMetapointIdxBank; 
@@ -482,7 +482,7 @@ public:
 
 			std::sort(nOrderMetaMetaMetapointIdxBank.begin(), nOrderMetaMetaMetapointIdxBank.end());
 			unsigned skipcount2 = 0;
-			Log(Log_Verbose, "\n\Third loop\n\n");
+			Log(Log_Verbose, "\n\nThird loop\n\n");
 			
 			for (int i = 0; i < ((int) nOrderMetaMetaMetapointIdxBank.size()) - 1; i++)
 			{
