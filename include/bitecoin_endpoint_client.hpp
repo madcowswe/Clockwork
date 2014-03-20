@@ -493,22 +493,6 @@ public:
 
 				for (int j = 0; j < enabledIndicies / 4; j++)
 					indicies[j + (0.75) * enabledIndicies] = (*currentBank)[i + 1].second[j] + diff;
-					
-					//uint32_t aidx1 = nOrderMetaMetaMetapointIdxBank[i].second[0];
-					//uint32_t aidx2 = nOrderMetaMetaMetapointIdxBank[i].second[1];
-					//uint32_t aidx3 = nOrderMetaMetaMetapointIdxBank[i].second[2];
-					//uint32_t aidx4 = nOrderMetaMetaMetapointIdxBank[i].second[3];
-					//uint32_t bidx1 = nOrderMetaMetaMetapointIdxBank[i + 1].second[0];
-					//uint32_t bidx2 = nOrderMetaMetaMetapointIdxBank[i + 1].second[1];
-					//uint32_t bidx3 = nOrderMetaMetaMetapointIdxBank[i + 1].second[2];
-					//uint32_t bidx4 = nOrderMetaMetaMetapointIdxBank[i + 1].second[3];
-
-				
-
-				 //= { 
-					//aidx1, aidx2, aidx3, aidx4, bidx1, bidx2, bidx3, bidx4, 
-					//aidx1 + diff, aidx2 + diff, aidx3 + diff, aidx4 + diff, 
-					//bidx1 + diff, bidx2 + diff, bidx3 + diff, bidx4 + diff };
 
 				std::sort(indicies.begin(), indicies.begin() + enabledIndicies);
 				auto x = std::adjacent_find(indicies.begin(), indicies.begin() + enabledIndicies);
