@@ -300,7 +300,7 @@ public:
 			std::uniform_int_distribution<uint32_t> uniform_baserange(0u, (uint32_t)(-1) - diff);
 			unsigned failcount = 0;
 
-			std::pair<uint64_t, uint64_t> bestmmpoint = std::make_pair(-1ull, -1ull);
+			wide_as_pair bestmmpoint = std::make_pair(std::make_pair(-1ull, -1ull), std::make_pair(-1ull, -1ull));
 			//std::pair<uint32_t, uint32_t> besti;
 
 			unsigned skipcount = 0;
@@ -355,6 +355,7 @@ public:
 				if (failcount >= 0.3*Nss){
 					Log(Log_Verbose, "Second pass: Not enough MSW clear: Override!!!!");
 				}
+
 			}
 
 			std::sort(nOrderMetapointIdxBank.begin(), nOrderMetapointIdxBank.end());
@@ -372,7 +373,7 @@ public:
 				std::array<uint32_t, 4> indicies = { aidx, bidx, aidx + diff, bidx + diff};
 				std::sort(indicies.begin(), indicies.end());
 				auto x = std::adjacent_find(indicies.begin(), indicies.end());
-
+				
 				if (x != indicies.end())
 				{
 					//Log(Log_Verbose, "Skipped index:%d", i);
@@ -380,19 +381,14 @@ public:
 					continue;
 				}
 
-				std::pair<uint64_t, uint64_t> a = nOrderMetapointIdxBank[i].first.first;
-				std::pair<uint64_t, uint64_t> b = nOrderMetapointIdxBank[i + 1].first.first;
-				std::pair<uint64_t, uint64_t> currmmpointUpper = pairwise_xor(a, b);
-
-				a = nOrderMetapointIdxBank[i].first.second;
-				b = nOrderMetapointIdxBank[i + 1].first.second;
-				std::pair<uint64_t, uint64_t> currmmpointLower = pairwise_xor(a, b);
+				auto a = nOrderMetapointIdxBank[i].first;
+				auto b = nOrderMetapointIdxBank[i + 1].first;
+				auto currmmpoint = wap_xor(a, b);
 
 				wide_idx_pair_2 wip;
 				
 				//Meta-meta points
-				wip.first.first = currmmpointUpper;
-				wip.first.second = currmmpointLower;
+				wip.first = currmmpoint;
 
 				//Update indicies
 				wip.second[0] = aidx;
@@ -427,19 +423,14 @@ public:
 					continue;
 				}
 
-				std::pair<uint64_t, uint64_t> a = nOrderMetaMetapointIdxBank[i].first.first;
-				std::pair<uint64_t, uint64_t> b = nOrderMetaMetapointIdxBank[i + 1].first.first;
-				std::pair<uint64_t, uint64_t> currmmpointUpper = pairwise_xor(a, b);
+				auto a = nOrderMetaMetapointIdxBank[i].first;
+				auto b = nOrderMetaMetapointIdxBank[i + 1].first;
+				auto currmmpoint = wap_xor(a, b);
 
 				wide_idx_pair_4 wip;
 
-				a = nOrderMetaMetapointIdxBank[i].first.second;
-				b = nOrderMetaMetapointIdxBank[i + 1].first.second;
-				std::pair<uint64_t, uint64_t> currmmpointLower = pairwise_xor(a, b);
-
 				//Meta-meta-meta points
-				wip.first.first = currmmpointUpper;
-				wip.first.second = currmmpointLower;
+				wip.first = currmmpoint;
 
 				//Update indicies
 				wip.second[0] = aidx1;
@@ -486,9 +477,7 @@ public:
 					continue;
 				}
 
-				std::pair<uint64_t, uint64_t> a = nOrderMetapointIdxBank[i].first.first;
-				std::pair<uint64_t, uint64_t> b = nOrderMetapointIdxBank[i + 1].first.first;
-				std::pair<uint64_t, uint64_t> currmmpoint = pairwise_xor(a, b);
+				auto currmmpoint = wap_xor(nOrderMetapointIdxBank[i].first, nOrderMetapointIdxBank[i + 1].first);
 
 				if (currmmpoint <= bestmmpoint)
 				{
