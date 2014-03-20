@@ -97,7 +97,7 @@ public:
 
 		//TODO: weak Seen set & strong GoldenDiff cache
 
-		unsigned Ngd = 1<<(16+1);
+		unsigned Ngd = 1<<(16+2);
 		std::vector<std::pair<uint64_t, uint32_t>> pointidxbank(Ngd);
 
 		std::random_device seeder;
@@ -216,7 +216,7 @@ public:
 				bigint_t metapoint;
 				wide_xor(8, metapoint.limbs, point1.limbs, point2.limbs);
 
-				if (metapoint.limbs[7] == 0u || failcount >= 0.3*Nss)
+				if (metapoint.limbs[7] == 0u)
 				{
 					metapointidxbank.push_back(std::make_pair(
 						std::make_pair(
@@ -225,6 +225,13 @@ public:
 						idx1) );
 				} else {
 					failcount++;
+					if(failcount >= 0.3*Nss){
+						metapointidxbank.push_back(std::make_pair(
+						std::make_pair(
+						((uint64_t)metapoint.limbs[7] << 32) + metapoint.limbs[6],
+						((uint64_t)metapoint.limbs[5] << 32) + metapoint.limbs[4]),
+						idx1) );
+					}
 				}
 			}
 
