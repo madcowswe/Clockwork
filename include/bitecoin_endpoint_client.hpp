@@ -378,7 +378,7 @@ public:
 				}
 
 			double tic2 = now();
-			//Log(Log_Verbose, "\n\nFirst loop:%d\n\n", (tic2 - tic1)*1e-9 );
+			Log(Log_Verbose, "\n\nFirst loop:%d\n\n", (tic2 - tic1)*1e-9 );
 			
 			if (failcount > 0.20*Nss){
 				Log(Log_Verbose, "We failed to clear MSW %d times when filling Nss=%d", failcount, Nss);
@@ -390,7 +390,7 @@ public:
 			std::sort(nOrderMetapointIdxBank.begin(), nOrderMetapointIdxBank.end());
 			
 			std::vector<wide_idx_pair_2> nOrderMetaMetapointIdxBank;
-			nOrderMetaMetapointIdxBank.reserve(Nss-1u);
+			nOrderMetaMetapointIdxBank.reserve(std::max(((int)Nss)-1,0));
 
 			//Depth 1:
 			for (unsigned i = 0; i < Nss - 1u; i++)
@@ -430,16 +430,16 @@ public:
 				nOrderMetaMetapointIdxBank.push_back(wip);
 
 			}
-
+			Log(Log_Verbose, "\n\Second loop\n\n");
 			std::sort(nOrderMetaMetapointIdxBank.begin(), nOrderMetaMetapointIdxBank.end());
 
 			std::vector<wide_idx_pair_4> nOrderMetaMetaMetapointIdxBank; 
-			nOrderMetaMetaMetapointIdxBank.reserve(Nss - 2u - skipcount);
+			nOrderMetaMetaMetapointIdxBank.reserve(std::max(((int) Nss) - 2 - ((int) skipcount), 0));
 			
 			unsigned skipcount1 = 0;
 
 			//Depth 2:
-			for (unsigned i = 0; i < Nss - 2u - skipcount	; i++)
+			for (int i = 0; i < /*Nss - 2u - skipcount*/nOrderMetaMetapointIdxBank.size() - 1; i++)
 			{
 				uint32_t aidx1 = nOrderMetaMetapointIdxBank[i].second[0];
 				uint32_t aidx2 = nOrderMetaMetapointIdxBank[i].second[1];
@@ -482,9 +482,9 @@ public:
 
 			std::sort(nOrderMetaMetaMetapointIdxBank.begin(), nOrderMetaMetaMetapointIdxBank.end());
 			unsigned skipcount2 = 0;
-
-			//4u seems to work better - WHY?
-			for (unsigned i = 0; i < nOrderMetaMetaMetapointIdxBank.size() - 1u; i++)
+			Log(Log_Verbose, "\n\Third loop\n\n");
+			
+			for (int i = 0; i < nOrderMetaMetaMetapointIdxBank.size() - 1; i++)
 			{
 
 				uint32_t aidx1 = nOrderMetaMetaMetapointIdxBank[i].second[0];
@@ -533,7 +533,7 @@ public:
 			//}
 
 			//And now we do meta-meta points
-
+			Log(Log_Verbose, "\nAmazing tom\n");
 			Log(Log_Debug, "Second pass: Skipped %u inclusive idx, Overload %u", skipcount2, overloadcount);
 						
 			std::sort(besti.begin(), besti.end());
