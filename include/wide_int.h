@@ -7,10 +7,15 @@
 #include <stdio.h>
 #include <math.h>
 
+
 typedef std::pair<std::pair<uint64_t, uint64_t>, std::pair<uint64_t, uint64_t>>
-	wide_as_pair;
-typedef std::pair<wide_as_pair, std::vector<uint32_t>>
-	point_idx_pair;
+wide_as_pair;
+
+typedef std::pair<wide_as_pair, std::array<uint32_t, 1>> wide_idx_pair_1;
+typedef std::pair<wide_as_pair, std::array<uint32_t, 2>> wide_idx_pair_2;
+typedef std::pair<wide_as_pair, std::array<uint32_t, 4>> wide_idx_pair_4;
+
+
 
 /*! Simply library for maintaining large positive integers as an array
 	of 32-bit limbs */
@@ -73,8 +78,8 @@ std::pair<T1,T2> pairwise_xor(std::pair<T1,T2> a, std::pair<T1,T2> b){
 	return std::make_pair(a.first ^ b.first, a.second ^ b.second);
 }
 
-template<class T1, class T2>
-std::pair<T1,T2> pairwise_xor2(std::pair<T1,T2> a, std::pair<T1,T2> b){
+
+wide_as_pair wap_xor(wide_as_pair a, wide_as_pair b){
 	return std::make_pair(pairwise_xor(a.first, b.first), pairwise_xor(a.second, b.second));
 }
 
