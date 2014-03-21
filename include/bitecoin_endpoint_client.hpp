@@ -101,7 +101,7 @@ public:
 		
 		//TODO: weak Seen set & strong GoldenDiff cache
 
-		unsigned Ngd = 1<<(16+1);
+		unsigned Ngd = 1<<(16+2);
 		std::vector<std::pair<uint64_t, uint32_t>> pointidxbank(Ngd);
 
 		std::random_device seeder;
@@ -183,7 +183,7 @@ public:
 		static double hashrate = 1<<16;
 		double timeBudgetInital = timeBudget;
 
-		unsigned maxIdx = 4;//roundInfo.get()->maxIndices;
+		unsigned maxIdx = roundInfo.get()->maxIndices;
 
 		while(1){
 			unsigned Nss = 0.8 * std::max(timeBudget,0.) * hashrate/roundInfo->hashSteps;
@@ -201,7 +201,7 @@ public:
 			std::array<uint32_t, 16> besti;
 
 
-			if (maxIdx>= 4) 
+			if (maxIdx >= 4) 
 			{
 				enabledIndicies = 4;
 				std::vector<wide_idx_pair_4> M1pointIdxBank;
