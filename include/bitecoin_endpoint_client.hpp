@@ -204,7 +204,7 @@ public:
 			
 			Log(Log_Debug, "Trial %d.", nTrials);
 
-			unsigned enabledIndicies = 2;
+			int enabledIndicies = 2;
 			std::array<uint32_t, 16> besti;
 
 
@@ -281,7 +281,7 @@ public:
 					unsigned skipcount = 0;
 					
 					//Depth 2:
-					for (unsigned i = 0; i < workingBankSize; i++)
+					for (int i = 0; i < workingBankSize; i++)
 					{
 						uint32_t aidx = M1pointIdxBank[i].second[0];
 						uint32_t bidx = M1pointIdxBank[i + 1].second[0];
