@@ -89,6 +89,7 @@ public:
 		std::vector<uint32_t> &solution,												// Our vector of indices describing the solution
 		uint32_t *pProof																		// Will contain the "proof", which is just the value
 	){
+		static std::map<std::pair<uint32_t, std::array<uint32_t, BIGINT_WORDS / 2>>, uint32_t> diffCache;
 		double tSafetyMargin=0.5;	// accounts for uncertainty in network conditions
 		tSafetyMargin+=0.5;	// latency of banked algo
 		/* This is when the server has said all bids must be produced by, plus the
@@ -111,70 +112,90 @@ public:
 		std::minstd_rand rand_engine(seeder());
 		std::uniform_int_distribution<uint32_t> uniform_distr;
 
+		
+
+		
+
 		auto fastrand = [&]{
 			return uniform_distr(rand_engine);
 		};
 
 		double difftic = now()*1e-9;
-
-		//for (unsigned i = 0; i < Ngd; i++)
-		tbb::parallel_for((unsigned) 0, Ngd, [&](unsigned i) {
-			uint32_t curridx = fastrand();
-			bigint_t point = point_preload;
-			point.limbs[0] = curridx;
-
-			for(unsigned j=0;j<roundInfo->hashSteps;j++){
-				PoolHashStep(point, roundInfo.get());
-			}
-
-			uint64_t point64 = ((uint64_t)point.limbs[7] << 32) + point.limbs[6];
-			pointidxbank[i] = std::make_pair(point64, curridx);
-
-		});
-
-		double diffgent = now()*1e-9;
-
-		tbb::parallel_sort(pointidxbank.begin(), pointidxbank.end());
-
+		std::array<uint32_t, 4> temp = { { roundInfo.get()->c[0], roundInfo.get()->c[1], roundInfo.get()->c[2], roundInfo.get()->c[3] } };
+		std::pair<uint32_t, std::array<uint32_t, BIGINT_WORDS / 2>> key = std::make_pair(roundInfo.get()->hashSteps, temp);
 		uint32_t GoldenDiff = 0;
-		uint64_t bestdistance = -1;
-		unsigned skipcount = 0;
-		unsigned overloadcount = 0;
-		for (unsigned i = 0; i < Ngd-1u; i++)
+		if (diffCache.find(key) == diffCache.end())
 		{
-			uint32_t aidx = pointidxbank[i].second;
-			uint32_t bidx = pointidxbank[i+1].second;
-			if (aidx == bidx)
-			{
-				skipcount++;
-				continue;
-			}
+			//for (unsigned i = 0; i < Ngd; i++)
+			tbb::parallel_for((unsigned)0, Ngd, [&](unsigned i) {
+				uint32_t curridx = fastrand();
+				bigint_t point = point_preload;
+				point.limbs[0] = curridx;
 
-			uint64_t a = pointidxbank[i].first;
-			uint64_t b = pointidxbank[i+1].first;
-			uint64_t currabsdiff;
-			if (a>b)
-				currabsdiff = a-b;
-			else
-				currabsdiff = b-a;
+				for (unsigned j = 0; j < roundInfo->hashSteps; j++){
+					PoolHashStep(point, roundInfo.get());
+				}
 
-			if (currabsdiff <= bestdistance)
+				uint64_t point64 = ((uint64_t)point.limbs[7] << 32) + point.limbs[6];
+				pointidxbank[i] = std::make_pair(point64, curridx);
+
+			});
+
+			double diffgent = now()*1e-9;
+
+			tbb::parallel_sort(pointidxbank.begin(), pointidxbank.end());
+						
+			uint64_t bestdistance = -1;
+			unsigned skipcount = 0;
+			unsigned overloadcount = 0;
+			for (unsigned i = 0; i < Ngd - 1u; i++)
 			{
-				if (currabsdiff == bestdistance){
-					overloadcount++;
-				} else {
-					overloadcount = 0;
-					bestdistance = currabsdiff;
-					if (aidx > bidx)
-						GoldenDiff = aidx - bidx;
-					else
-						GoldenDiff = bidx - aidx;
+				uint32_t aidx = pointidxbank[i].second;
+				uint32_t bidx = pointidxbank[i + 1].second;
+				if (aidx == bidx)
+				{
+					skipcount++;
+					continue;
+				}
+
+				uint64_t a = pointidxbank[i].first;
+				uint64_t b = pointidxbank[i + 1].first;
+				uint64_t currabsdiff;
+				if (a > b)
+					currabsdiff = a - b;
+				else
+					currabsdiff = b - a;
+
+				if (currabsdiff <= bestdistance)
+				{
+					if (currabsdiff == bestdistance){
+						overloadcount++;
+					}
+					else {
+						overloadcount = 0;
+						bestdistance = currabsdiff;
+						if (aidx > bidx)
+							GoldenDiff = aidx - bidx;
+						else
+							GoldenDiff = bidx - aidx;
+					}
 				}
 			}
+
+
+			diffCache[key] = GoldenDiff;
+			double diffsortscant = now()*1e-9;
+			Log(Log_Verbose, "Diff generate: %g\t sort-scan: %g", diffgent - difftic, diffsortscant - diffgent);
+
+		}
+		else 
+		{
+			GoldenDiff = diffCache[key];
+			Log(Log_Verbose, "\n\n\nFOUND DIFF! %d\n\n\n", GoldenDiff);
 		}
 
-		double diffsortscant = now()*1e-9;
-		Log(Log_Verbose, "Diff generate: %g\t sort-scan: %g", diffgent-difftic, diffsortscant-diffgent);
+
+
 
 		//quick and dirty 2 idx solution in case we run out of time
 		uint32_t bsInitVSsucks[] = {0, GoldenDiff};
@@ -185,7 +206,7 @@ public:
 		wide_xor(8, bestProof.limbs, pointa.limbs, pointb.limbs);
 		unsigned k = 2;
 
-		Log(Log_Verbose, "Best distance 0x%016x\t GoldenDiff 0x%08x. Skipped %u identical, Overload %u.", bestdistance, GoldenDiff, skipcount, overloadcount);
+	//	Log(Log_Verbose, "Best distance 0x%016x\t GoldenDiff 0x%08x. Skipped %u identical, Overload %u.", bestdistance, GoldenDiff, skipcount, overloadcount);
 		
 		unsigned nTrials=0;
 		double t=now()*1e-9;	// Work out where we are against the deadline
