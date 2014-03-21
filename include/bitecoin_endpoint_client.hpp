@@ -232,12 +232,13 @@ public:
 				//			Sort
 				//
 
-#ifndef USECUDA
-
 				//gen
 				unsigned diff = GoldenDiff;//0x94632009;
 				std::uniform_int_distribution<uint32_t> uniform_baserange(0u, (uint32_t)(-1) - diff);
 				M1pointIdxBank.reserve(Nss);
+
+#ifndef USECUDA
+
 				for (unsigned i = 0; i < Nss; i++)
 				{
 					uint32_t idx1 = uniform_baserange(rand_engine);
@@ -266,9 +267,6 @@ public:
 #else
 				//GPU
 
-				std::vector<std::pair<wide_as_pair, uint32_t>> metapointidxbank;
-				metapointidxbank.reserve(Nss);
-
 				std::vector<uint32_t> idxbank(Nss);
 				for (int i = 0; i < Nss; i++)
 				{
@@ -285,7 +283,10 @@ public:
 
 				for (int i = 0; i < Nss; i++)
 				{
-					metapointidxbank.push_back(std::make_pair(pointbank[i], idxbank[i]));
+					wide_idx_pair_4 newMetapoint;
+					newMetapoint.first = pointbank[i];
+					newMetapoint.second[0] = idxbank[i];
+					M1pointIdxBank.push_back(newMetapoint);
 				}
 #endif
 
