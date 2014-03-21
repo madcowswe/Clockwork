@@ -19,10 +19,13 @@
 #include "bitecoin_hashing.hpp"
 #include "wide_int.h"
 
+
 //#include "Clockwork.hpp"
 
 #include <random>
 
+#include "tbb/parallel_sort.h"
+#include "tbb/parallel_for.h"
 //#define USECUDA
 
 #ifdef USECUDA
@@ -114,8 +117,8 @@ public:
 
 		double difftic = now()*1e-9;
 
-		for (unsigned i = 0; i < Ngd; i++)
-		{
+		//for (unsigned i = 0; i < Ngd; i++)
+		tbb::parallel_for((unsigned) 0, Ngd, [&](unsigned i) {
 			uint32_t curridx = fastrand();
 			bigint_t point = point_preload;
 			point.limbs[0] = curridx;
@@ -127,11 +130,11 @@ public:
 			uint64_t point64 = ((uint64_t)point.limbs[7] << 32) + point.limbs[6];
 			pointidxbank[i] = std::make_pair(point64, curridx);
 
-		}
+		});
 
 		double diffgent = now()*1e-9;
 
-		std::sort(pointidxbank.begin(), pointidxbank.end());
+		tbb::parallel_sort(pointidxbank.begin(), pointidxbank.end());
 
 		uint32_t GoldenDiff = 0;
 		uint64_t bestdistance = -1;
@@ -188,6 +191,8 @@ public:
 		double t=now()*1e-9;	// Work out where we are against the deadline
 		double timeBudget=tFinish-t;
 		static double hashrate = 1<<16;
+		static double avgHR = 0;
+		static int nSample = 0;
 		double timeBudgetInital = timeBudget;
 
 		unsigned maxIdx = roundInfo.get()->maxIndices;
@@ -267,7 +272,8 @@ public:
 					Log(Log_Debug, "gen :%g", (tic2 - tic));
 
 				//sort
-				std::sort(M1pointIdxBank.begin(), M1pointIdxBank.end());
+				tbb::parallel_sort(M1pointIdxBank.begin(), M1pointIdxBank.end());
+				//std::sort(, );
 
 				int workingBankSize = std::max((int)M1pointIdxBank.size() - 1, 0);
 
@@ -315,7 +321,7 @@ public:
 
 					}
 					Log(Log_Debug, "Second loop. Skipped %d", skipcount);
-					std::sort(M2pointIdxBank.begin(), M2pointIdxBank.end());
+					tbb::parallel_sort(M2pointIdxBank.begin(), M2pointIdxBank.end());
 					
 					workingBankSize = std::max((int)M2pointIdxBank.size() - 1, 0);
 
@@ -367,7 +373,7 @@ public:
 
 					Log(Log_Debug, "Third loop. Skipped %d", skipcount1);
 
-					std::sort(M3pointIdxBank.begin(), M3pointIdxBank.end());
+					tbb::parallel_sort(M3pointIdxBank.begin(), M3pointIdxBank.end());
 
 					Log(Log_Debug, "Third loop");
 
@@ -460,7 +466,10 @@ public:
 			if (timeBudget >= 0.4*timeBudgetInital)
 			{
 				hashrate = (Nss*roundInfo->hashSteps)/(std::max(toc-tic, 0.1));
+				avgHR += hashrate;
+				nSample++;
 				Log(Log_Verbose, "New hashrate %g.", hashrate);
+				Log(Log_Verbose, "==Avg hashrate %g.", avgHR / nSample);
 			}
 
 			timeBudget=tFinish-toc;
