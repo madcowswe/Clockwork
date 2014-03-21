@@ -146,7 +146,7 @@ public:
 			tbb::parallel_sort(pointidxbank.begin(), pointidxbank.end());
 						
 			uint64_t bestdistance = -1;
-			unsigned skipcount = 0;
+			//unsigned skipcount = 0;
 			unsigned overloadcount = 0;
 			for (unsigned i = 0; i < Ngd - 1u; i++)
 			{
@@ -154,7 +154,7 @@ public:
 				uint32_t bidx = pointidxbank[i + 1].second;
 				if (aidx == bidx)
 				{
-					skipcount++;
+					//skipcount++;
 					continue;
 				}
 
@@ -243,15 +243,15 @@ public:
 				std::vector<wide_idx_pair_4>* currentBank = &M1pointIdxBank;
 
 
-				//0 depth:	Generate indicies
+				//2 depth:	Generate indicies
 				//			Generate points from indicies
 				//			XOR to make meta-points
 				//			Put metapoints and indicies into bank (1 base 1 implied)
 				//			Sort
-				//1 depth:	Take meta-points and indicies
+				//3 depth:	Take meta-points and indicies
 				//			XOR to make meta-meta points store indicies (2 base - 2 implied)
 				//			Sort
-				//2 depth:	Take meta-meta points and indicies 4 base - 4 implied
+				//4 depth:	Take meta-meta points and indicies 4 base - 4 implied
 				//			XOR to make meta^3-points
 				//			Sort
 				//
@@ -259,8 +259,11 @@ public:
 				//gen
 				unsigned diff = GoldenDiff;//0x94632009;
 				std::uniform_int_distribution<uint32_t> uniform_baserange(0u, (uint32_t)(-1) - diff);
-				M1pointIdxBank.reserve(Nss);
-				for (unsigned i = 0; i < Nss; i++)
+				//M1pointIdxBank.reserve(Nss);
+				M1pointIdxBank.resize(Nss);
+				//for (unsigned i = 0; i < Nss; i++)
+				tbb::parallel_for((unsigned)0, Nss, [&](unsigned i)
+				
 				{
 					uint32_t idx1 = uniform_baserange(rand_engine);
 					bigint_t point1 = pointFromIdx(roundInfo.get(), point_preload, idx1);
@@ -283,8 +286,9 @@ public:
 
 					newMetapoint.second[0] = idx1;
 
-					M1pointIdxBank.push_back(newMetapoint);
-				}
+					//M1pointIdxBank.push_back(newMetapoint);
+					M1pointIdxBank[i] = newMetapoint;
+				});
 
 				double tic2 = now()*1e-9;
 				if((tic2 - tic) > 0.1*timeBudgetInital)
@@ -303,14 +307,17 @@ public:
 					if (maxIdx < 8) 
 						break;
 
-					M2pointIdxBank.reserve(workingBankSize);
+					//M2pointIdxBank.reserve(workingBankSize);
+					M2pointIdxBank.resize(workingBankSize);
 					currentBank = &M2pointIdxBank;
 					enabledIndicies = 8;
-					unsigned skipcount = 0;
+					//unsigned skipcount = 0;
 					
-					//Depth 2:
-					for (int i = 0; i < workingBankSize; i++)
+					//Depth 3:
+					//for (int i = 0; i < workingBankSize; i++)
+					tbb::parallel_for((int)0, workingBankSize, [&](int i)				
 					{
+						
 						uint32_t aidx = M1pointIdxBank[i].second[0];
 						uint32_t bidx = M1pointIdxBank[i + 1].second[0];
 
@@ -318,45 +325,50 @@ public:
 						std::sort(indicies.begin(), indicies.end());
 						auto x = std::adjacent_find(indicies.begin(), indicies.end());
 
-						if (x != indicies.end())
+						if (x == indicies.end())
 						{
-							//Log(Log_Verbose, "Skipped index:%d", i);
-							skipcount++;
-							continue;
+						//	//Log(Log_Verbose, "Skipped index:%d", i);
+						//	//skipcount++;
+						//	continue;
+						//}
+						//else {
+
+							auto a = M1pointIdxBank[i].first;
+							auto b = M1pointIdxBank[i + 1].first;
+							auto currmmpoint = wap_xor(a, b);
+
+							wide_idx_pair_4 wip;
+
+							//Meta-meta points
+							wip.first = currmmpoint;
+
+							//Update indicies
+							wip.second[0] = aidx;
+							wip.second[1] = bidx;
+
+							//M2pointIdxBank.push_back(wip);
+							M2pointIdxBank[i] = wip;
 						}
-
-						auto a = M1pointIdxBank[i].first;
-						auto b = M1pointIdxBank[i + 1].first;
-						auto currmmpoint = wap_xor(a, b);
-
-						wide_idx_pair_4 wip;
-
-						//Meta-meta points
-						wip.first = currmmpoint;
-
-						//Update indicies
-						wip.second[0] = aidx;
-						wip.second[1] = bidx;
-
-						M2pointIdxBank.push_back(wip);
-
-					}
-					Log(Log_Debug, "Second loop. Skipped %d", skipcount);
+					});
+					//Log(Log_Debug, "Second loop. Skipped %d", skipcount);
 					tbb::parallel_sort(M2pointIdxBank.begin(), M2pointIdxBank.end());
 					
 					workingBankSize = std::max((int)M2pointIdxBank.size() - 1, 0);
 
 
 
-					//Depth 3:
+					//Depth 4:
 					if (maxIdx < 16) 
 						break;
 
-					unsigned skipcount1 = 0;
+					//unsigned skipcount1 = 0;
 					enabledIndicies = 16;
 					currentBank = &M3pointIdxBank;
-					M3pointIdxBank.reserve(workingBankSize);
-					for (int i = 0; i < workingBankSize; i++)
+					//M3pointIdxBank.reserve(workingBankSize);
+					M3pointIdxBank.resize(workingBankSize);
+
+					//for (int i = 0; i < workingBankSize; i++)
+					tbb::parallel_for((int)0, workingBankSize, [&](int i)
 					{
 						uint32_t aidx1 = M2pointIdxBank[i].second[0];
 						uint32_t aidx2 = M2pointIdxBank[i].second[1];
@@ -367,32 +379,30 @@ public:
 						std::sort(indicies.begin(), indicies.end());
 						auto x = std::adjacent_find(indicies.begin(), indicies.end());
 
-						if (x != indicies.end())
+						if (x == indicies.end())
 						{
-							skipcount1++;
-							continue;
+							auto a = M2pointIdxBank[i].first;
+							auto b = M2pointIdxBank[i + 1].first;
+							auto currmmpoint = wap_xor(a, b);
+
+							wide_idx_pair_4 wip;
+
+							//Meta-meta-meta points
+							wip.first = currmmpoint;
+
+							//Update indicies
+							wip.second[0] = aidx1;
+							wip.second[1] = aidx2;
+							wip.second[2] = bidx1;
+							wip.second[3] = bidx2;
+
+							//M3pointIdxBank.push_back(wip);
+							M3pointIdxBank[i] = (wip);
 						}
 
-						auto a = M2pointIdxBank[i].first;
-						auto b = M2pointIdxBank[i + 1].first;
-						auto currmmpoint = wap_xor(a, b);
+					});
 
-						wide_idx_pair_4 wip;
-
-						//Meta-meta-meta points
-						wip.first = currmmpoint;
-
-						//Update indicies
-						wip.second[0] = aidx1;
-						wip.second[1] = aidx2;
-						wip.second[2] = bidx1;
-						wip.second[3] = bidx2;
-
-						M3pointIdxBank.push_back(wip);
-
-					}
-
-					Log(Log_Debug, "Third loop. Skipped %d", skipcount1);
+					//Log(Log_Debug, "Third loop. Skipped %d", skipcount1);
 
 					tbb::parallel_sort(M3pointIdxBank.begin(), M3pointIdxBank.end());
 
