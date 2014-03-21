@@ -32,11 +32,12 @@ namespace bitecoin{
 
 #ifdef USECUDA
 	
-	std::vector<wide_as_pair> genpoints_on_GPU (
+	std::vector<wide_as_pair> genmpoints_on_GPU (
 		unsigned hashsteps,
 		const uint32_t* const c,
 		const uint32_t* const,
-		const std::vector<uint32_t> &indexbank
+		const std::vector<uint32_t> &indexbank,
+		unsigned diff
 	);
 #endif
 
@@ -181,7 +182,7 @@ public:
 		double timeBudgetInital = timeBudget;
 
 		while(1){
-			unsigned Nss = 0.8 * std::max(timeBudget,0.) * hashrate;
+			unsigned Nss = 0.8 * std::max(timeBudget,0.) * hashrate/roundInfo->hashSteps;
 			if (Nss == 0)
 			{
 				break;
@@ -237,22 +238,23 @@ public:
 			std::vector<std::pair<wide_as_pair, uint32_t>> metapointidxbank;
 			metapointidxbank.reserve(Nss);
 
-			std::vector<uint32_t> idxbank(Nss*2);
-			for (int i = 0; i < Nss; i += 2)
+			std::vector<uint32_t> idxbank(Nss);
+			for (int i = 0; i < Nss; i++)
 			{
 				idxbank[i] = uniform_baserange(rand_engine);
-				idxbank[i+1] = idxbank[i] + diff;
+				//idxbank[i+1] = idxbank[i] + diff;
 			}
 
-			std::vector<wide_as_pair> pointbank = genpoints_on_GPU(
+			std::vector<wide_as_pair> pointbank = genmpoints_on_GPU(
 				roundInfo->hashSteps, roundInfo->c,
 				point_preload.limbs,
-				idxbank
+				idxbank,
+				diff
 			);
 
-			for (int i = 0; i < Nss; i += 2)
+			for (int i = 0; i < Nss; i++)
 			{
-				metapointidxbank.push_back(std::make_pair(pairwise_xor2(pointbank[i], pointbank[i+1]), idxbank[i]));
+				metapointidxbank.push_back(std::make_pair(pointbank[i], idxbank[i]));
 			}
 
 
@@ -321,7 +323,7 @@ public:
 			double toc=now()*1e-9;	// Work out where we are against the deadline
 			if (timeBudget >= 0.4*timeBudgetInital)
 			{
-				hashrate = Nss/(std::max(toc-tic, 0.1));
+				hashrate = (roundInfo->hashSteps*Nss)/(std::max(toc-tic, 0.1));
 				Log(Log_Verbose, "New hashrate %g.", hashrate);
 			}
 

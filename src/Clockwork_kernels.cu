@@ -115,10 +115,11 @@ struct genpoint
 {
 	uint32_t point_preload[8];
 	const unsigned numsteps;
+	const unsigned diff;
 	uint32_t c[4];
 
-	genpoint(const uint32_t* const ppre_in, unsigned ns_in, const uint32_t* const c_in) :
-		numsteps(ns_in)
+	genpoint(const uint32_t* const ppre_in, unsigned ns_in, const uint32_t* const c_in, unsigned diff_in) :
+		numsteps(ns_in), diff(diff_in)
 	{
 		for (int i = 0; i < 8; i++)
 		{
@@ -134,52 +135,66 @@ struct genpoint
 	__device__
 	wide_as_pair_GPU operator()(uint32_t idx){
 
-		uint32_t point[8];
-		point[0] = idx;
-		for (int i = 1; i < 8; i++)
+		uint32_t point[2][8];
+
+		for (int isdiff = 0; isdiff <= 1 ; isdiff++)
 		{
-			point[i] = point_preload[i];
+			point[isdiff][0] = idx + isdiff*diff;
+			for (int i = 1; i < 8; i++)
+			{
+				point[isdiff][i] = point_preload[i];
+
+				for (int i = 0; i < numsteps; i++)
+				{
+					bigint_t tmp;
+					// tmp=lo(x)*c;
+					wide_mul_GPU(4, tmp.limbs+4, tmp.limbs, point[isdiff], c);
+					// [carry,lo(x)] = lo(tmp)+hi(x)
+					uint32_t carry=wide_add_GPU(4, point[isdiff], tmp.limbs, point[isdiff]+4);
+					// hi(x) = hi(tmp) + carry
+					wide_add_GPU(4, point[isdiff]+4, tmp.limbs+4, carry);
+
+					// overall:  tmp=lo(x)*c; x=tmp+hi(x)
+				}
+
+			}
+
 		}
 
-		for (int i = 0; i < numsteps; i++)
+		uint32_t mpoint[8];
+		for (int i = 0; i < 8; i++)
 		{
-			bigint_t tmp;
-			// tmp=lo(x)*c;
-			wide_mul_GPU(4, tmp.limbs+4, tmp.limbs, point, c);
-			// [carry,lo(x)] = lo(tmp)+hi(x)
-			uint32_t carry=wide_add_GPU(4, point, tmp.limbs, point+4);
-			// hi(x) = hi(tmp) + carry
-			wide_add_GPU(4, point+4, tmp.limbs+4, carry);
-
-			// overall:  tmp=lo(x)*c; x=tmp+hi(x)
+			mpoint[i] = point[0][i] ^ point[1][i];
 		}
 
 		return thrust::make_pair(
 			thrust::make_pair(
-			((uint64_t)point[7] << 32) + point[6], 
-			((uint64_t)point[5] << 32) + point[4]
+			((uint64_t)mpoint[7] << 32) + mpoint[6], 
+			((uint64_t)mpoint[5] << 32) + mpoint[4]
 		),
 			thrust::make_pair(
-			((uint64_t)point[3] << 32) + point[2], 
-			((uint64_t)point[1] << 32) + point[0]
+			((uint64_t)mpoint[3] << 32) + mpoint[2], 
+			((uint64_t)mpoint[1] << 32) + mpoint[0]
 		));
+
 	}
 };
 
 namespace bitecoin{
 
 	//TODO: zip into vector of pairs in place
-	std::vector<wide_as_pair> genpoints_on_GPU (
+	std::vector<wide_as_pair> genmpoints_on_GPU (
 		unsigned hashsteps,
 		const uint32_t* const c,
 		const uint32_t* const point_preload,
-		const std::vector<uint32_t> &indexbank
+		const std::vector<uint32_t> &indexbank,
+		unsigned diff
 	){
 
 		thrust::device_vector<uint32_t> indexbank_GPU = indexbank;
 		thrust::device_vector<wide_as_pair_GPU> output_GPU(indexbank.size());
 
-		thrust::transform(indexbank_GPU.begin(), indexbank_GPU.end(), output_GPU.begin(), genpoint(point_preload, hashsteps, c));
+		thrust::transform(indexbank_GPU.begin(), indexbank_GPU.end(), output_GPU.begin(), genpoint(point_preload, hashsteps, c, diff));
 
 		thrust::host_vector<wide_as_pair_GPU> op_hv = output_GPU;
 		std::vector<wide_as_pair> output(indexbank.size());
@@ -194,6 +209,35 @@ namespace bitecoin{
 		return output;
 
 	}
+
+#if 0
+	wide_as_pair gensortscan_on_GPU (
+		unsigned hashsteps,
+		const uint32_t* const c,
+		const uint32_t* const point_preload,
+		const std::vector<uint32_t> &indexbank
+	){
+
+		thrust::device_vector<uint32_t> indexbank_GPU = indexbank;
+		thrust::device_vector<wide_as_pair_GPU> pointbank_gpu(indexbank.size());
+
+		thrust::transform(indexbank_GPU.begin(), indexbank_GPU.end(), output_GPU.begin(), genpoint(point_preload, hashsteps, c));
+
+		
+		
+
+		wide_as_pair output;
+
+		output.first.first = op_hv.first.first;
+		output.first.second = op_hv.first.second;
+		output.second.first = op_hv.second.first;
+		output.second.second = op_hv.second.second;
+
+		return output;
+
+	}
+#endif
+
 
 } //namespace bitecoin
 
