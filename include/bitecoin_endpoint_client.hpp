@@ -207,7 +207,7 @@ public:
 				std::vector<wide_idx_pair_4> M1pointIdxBank;
 				std::vector<wide_idx_pair_4> M2pointIdxBank;
 				std::vector<wide_idx_pair_4> M3pointIdxBank;
-				std::vector<wide_idx_pair_4>* currentBank;
+				std::vector<wide_idx_pair_4>* currentBank = &M1pointIdxBank;
 				
 				double tic1 = now();
 
@@ -261,8 +261,8 @@ public:
 
 				//sort
 				std::sort(M1pointIdxBank.begin(), M1pointIdxBank.end());
-				currentBank = &M1pointIdxBank;
-				int workingBankSize = (unsigned)std::max((int)Nss - 1, 0);
+
+				int workingBankSize = std::max((int)M1pointIdxBank.size() - 1, 0);
 
 
 				do { //construct for using break to get to end
@@ -309,19 +309,19 @@ public:
 					}
 					Log(Log_Debug, "Second loop. Skipped %d", skipcount);
 					std::sort(M2pointIdxBank.begin(), M2pointIdxBank.end());
-
-
-					M3pointIdxBank.reserve(std::max((int)M2pointIdxBank.size() - 1, 0));
-
-					unsigned skipcount1 = 0;
-					workingBankSize = ((int)M2pointIdxBank.size() - 1);
-
 					
+					workingBankSize = std::max((int)M2pointIdxBank.size() - 1, 0);
+
+
+
 					//Depth 3:
 					if (maxIdx < 16) 
 						break;
+
+					unsigned skipcount1 = 0;
 					enabledIndicies = 16;
 					currentBank = &M3pointIdxBank;
+					M3pointIdxBank.reserve(workingBankSize);
 					for (int i = 0; i < workingBankSize; i++)
 					{
 						uint32_t aidx1 = M2pointIdxBank[i].second[0];
@@ -398,7 +398,7 @@ public:
 						continue;
 					}
 
-					auto currmmpoint = wap_xor(M1pointIdxBank[i].first, M1pointIdxBank[i + 1].first);
+					auto currmmpoint = wap_xor((*currentBank)[i].first, (*currentBank)[i + 1].first);
 
 					if (currmmpoint <= bestmmpoint)
 					{
