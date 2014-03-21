@@ -262,8 +262,7 @@ public:
 				//M1pointIdxBank.reserve(Nss);
 				M1pointIdxBank.resize(Nss);
 				//for (unsigned i = 0; i < Nss; i++)
-				tbb::parallel_for((unsigned)0, Nss, [&](unsigned i)
-				
+				tbb::parallel_for((unsigned)0, Nss, [&](unsigned i)	
 				{
 					uint32_t idx1 = uniform_baserange(rand_engine);
 					bigint_t point1 = pointFromIdx(roundInfo.get(), point_preload, idx1);
@@ -298,7 +297,6 @@ public:
 
 				//sort
 				tbb::parallel_sort(M1pointIdxBank.begin(), M1pointIdxBank.end());
-				//std::sort(, );
 
 				int workingBankSize = std::max((int)M1pointIdxBank.size() - 1, 0);
 
@@ -459,7 +457,7 @@ public:
 				}
 
 				//}
-
+				
 				//And now we do meta-meta points
 				double tocscan = now()*1e-9;
 				if((tocscan - tic2) > 0.1*timeBudgetInital)
