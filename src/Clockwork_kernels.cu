@@ -15,11 +15,11 @@
 
 
 
-typedef std::pair<std::pair<uint64_t, uint64_t>, std::pair<uint64_t, uint64_t>>
+typedef std::pair<std::pair<uint64_t, uint64_t>, std::pair<uint64_t, uint64_t> >
 	wide_as_pair;
-typedef std::pair<wide_as_pair, std::vector<uint32_t>>
+typedef std::pair<wide_as_pair, std::vector<uint32_t> >
 	point_idx_pair;
-typedef thrust::pair<thrust::pair<uint64_t, uint64_t>, thrust::pair<uint64_t, uint64_t>>
+typedef thrust::pair<thrust::pair<uint64_t, uint64_t>, thrust::pair<uint64_t, uint64_t> >
 	wide_as_pair_GPU;
 
 struct bigint_t

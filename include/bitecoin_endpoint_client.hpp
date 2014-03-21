@@ -268,7 +268,7 @@ public:
 				//GPU
 
 				std::vector<uint32_t> idxbank(Nss);
-				for (int i = 0; i < Nss; i++)
+				for (unsigned i = 0; i < Nss; i++)
 				{
 					idxbank[i] = uniform_baserange(rand_engine);
 					//idxbank[i+1] = idxbank[i] + diff;
@@ -281,7 +281,7 @@ public:
 					diff
 				);
 
-				for (int i = 0; i < Nss; i++)
+				for (unsigned i = 0; i < Nss; i++)
 				{
 					wide_idx_pair_4 newMetapoint;
 					newMetapoint.first = pointbank[i];
