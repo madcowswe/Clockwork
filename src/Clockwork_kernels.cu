@@ -12,6 +12,7 @@
 #include <vector>
 #include <thrust/device_vector.h>
 #include <thrust/transform.h>
+#include <thrust/sort.h>
 
 
 
@@ -25,6 +26,11 @@ typedef thrust::pair<thrust::pair<uint64_t, uint64_t>, thrust::pair<uint64_t, ui
 struct bigint_t
 {
 	uint32_t limbs[8];
+};
+
+struct halfbigint_t
+{
+	uint32_t limbs[4];
 };
 
 /*
@@ -143,20 +149,19 @@ struct genpoint
 			for (int i = 1; i < 8; i++)
 			{
 				point[isdiff][i] = point_preload[i];
+			}
 
-				for (int i = 0; i < numsteps; i++)
-				{
-					bigint_t tmp;
-					// tmp=lo(x)*c;
-					wide_mul_GPU(4, tmp.limbs+4, tmp.limbs, point[isdiff], c);
-					// [carry,lo(x)] = lo(tmp)+hi(x)
-					uint32_t carry=wide_add_GPU(4, point[isdiff], tmp.limbs, point[isdiff]+4);
-					// hi(x) = hi(tmp) + carry
-					wide_add_GPU(4, point[isdiff]+4, tmp.limbs+4, carry);
+			for (int i = 0; i < numsteps; i++)
+			{
+				bigint_t tmp;
+				// tmp=lo(x)*c;
+				wide_mul_GPU(4, tmp.limbs+4, tmp.limbs, point[isdiff], c);
+				// [carry,lo(x)] = lo(tmp)+hi(x)
+				uint32_t carry=wide_add_GPU(4, point[isdiff], tmp.limbs, point[isdiff]+4);
+				// hi(x) = hi(tmp) + carry
+				wide_add_GPU(4, point[isdiff]+4, tmp.limbs+4, carry);
 
-					// overall:  tmp=lo(x)*c; x=tmp+hi(x)
-				}
-
+				// overall:  tmp=lo(x)*c; x=tmp+hi(x)
 			}
 
 		}
@@ -180,9 +185,458 @@ struct genpoint
 	}
 };
 
+
+
+//modified from https://devtalk.nvidia.com/default/topic/610914/cuda-programming-and-performance/modular-exponentiation-amp-biginteger/
+__device__ __forceinline__ bigint_t add256 (bigint_t a, bigint_t b)
+{
+    bigint_t res;
+    asm ("{\n\t"
+         "add.cc.u32      %0,  %8, %16; \n\t"
+         "addc.cc.u32     %1,  %9, %17; \n\t"
+         "addc.cc.u32     %2, %10, %18; \n\t"
+         "addc.cc.u32     %3, %11, %19; \n\t"
+         "addc.cc.u32     %4, %12, %20; \n\t"
+         "addc.cc.u32     %5, %13, %21; \n\t"
+         "addc.cc.u32     %6, %14, %22; \n\t"
+         "addc.u32        %7, %15, %23; \n\t"
+         "}"
+         : "=r"(res.limbs[0]), "=r"(res.limbs[1]), "=r"(res.limbs[2]), "=r"(res.limbs[3]), "=r"(res.limbs[4]), "=r"(res.limbs[5]), "=r"(res.limbs[6]), "=r"(res.limbs[7])
+         : "r"(a.limbs[0]), "r"(a.limbs[1]), "r"(a.limbs[2]), "r"(a.limbs[3]),"r"(a.limbs[4]), "r"(a.limbs[5]), "r"(a.limbs[6]), "r"(a.limbs[7]),
+           "r"(b.limbs[0]), "r"(b.limbs[1]), "r"(b.limbs[2]), "r"(b.limbs[3]),"r"(b.limbs[4]), "r"(b.limbs[5]), "r"(b.limbs[6]), "r"(b.limbs[7]));
+    return res;
+}
+
+//modified from https://devtalk.nvidia.com/default/topic/610914/cuda-programming-and-performance/modular-exponentiation-amp-biginteger/
+__device__ __forceinline__ bigint_t add256 (bigint_t a, halfbigint_t b)
+{
+    bigint_t res;
+    asm ("{\n\t"
+         "add.cc.u32      %0,  %8, %16; \n\t"
+         "addc.cc.u32     %1,  %9, %17; \n\t"
+         "addc.cc.u32     %2, %10, %18; \n\t"
+         "addc.cc.u32     %3, %11, %19; \n\t"
+         "addc.u32        %4, %12,   0; \n\t"
+         //"addc.cc.u32     %5, %13, %21; \n\t"
+		 "mov.u32         %5, %13     ; \n\t"
+         //"addc.cc.u32     %6, %14, %22; \n\t"
+		 "mov.u32         %6, %14     ; \n\t"
+         //"addc.u32        %7, %15, %23; \n\t"
+		 "mov.u32         %7, %15     ; \n\t"
+         "}"
+         : "=r"(res.limbs[0]), "=r"(res.limbs[1]), "=r"(res.limbs[2]), "=r"(res.limbs[3]), "=r"(res.limbs[4]), "=r"(res.limbs[5]), "=r"(res.limbs[6]), "=r"(res.limbs[7])
+         : "r"(a.limbs[0]), "r"(a.limbs[1]), "r"(a.limbs[2]), "r"(a.limbs[3]),"r"(a.limbs[4]), "r"(a.limbs[5]), "r"(a.limbs[6]), "r"(a.limbs[7]),
+           "r"(b.limbs[0]), "r"(b.limbs[1]), "r"(b.limbs[2]), "r"(b.limbs[3]));
+    return res;
+}
+
+//modified from https://devtalk.nvidia.com/default/topic/610914/cuda-programming-and-performance/modular-exponentiation-amp-biginteger/
+__device__ __forceinline__ bigint_t umul256 (bigint_t a, bigint_t b)
+{
+    bigint_t res;
+    //top 12 13 14 15, 20 21 22 23
+    asm ("{\n\t"
+         "mul.lo.u32      %0,  %8, %16;    \n\t"
+
+         "mul.hi.u32      %1,  %8, %16;    \n\t"
+
+         "mad.lo.cc.u32   %1,  %8, %17, %1;\n\t"
+         "madc.hi.u32     %2,  %8, %17,  0;\n\t"
+
+         "mad.lo.cc.u32   %1,  %9, %16, %1;\n\t"
+         "madc.hi.cc.u32  %2,  %9, %16, %2;\n\t"
+         "madc.hi.u32     %3,  %8, %18,  0;\n\t"
+
+         "mad.lo.cc.u32   %2,  %8, %18, %2;\n\t"
+         "madc.hi.cc.u32  %3,  %9, %17, %3;\n\t"
+         "madc.hi.u32     %4,  %8, %19,  0;\n\t"
+
+         "mad.lo.cc.u32   %2,  %9, %17, %2;\n\t"
+         "madc.hi.cc.u32  %3, %10, %16, %3;\n\t"
+         "madc.hi.cc.u32  %4,  %9, %18, %4;\n\t"
+         "madc.hi.u32     %5,  %8, %20,  0;\n\t" // Uses top
+
+         "mad.lo.cc.u32   %2, %10, %16, %2;\n\t"
+         "madc.lo.cc.u32  %3,  %8, %19, %3;\n\t"
+         "madc.hi.cc.u32  %4, %10, %17, %4;\n\t"
+         "madc.hi.cc.u32  %5,  %9, %19, %5;\n\t"
+         "madc.hi.u32     %6,  %8, %21,  0;\n\t" // Uses top
+
+         "mad.lo.cc.u32   %3,  %9, %18, %3;\n\t"
+         "madc.hi.cc.u32  %4, %11, %16, %4;\n\t"
+         "madc.hi.cc.u32  %5, %10, %18, %5;\n\t"
+         "madc.hi.cc.u32  %6,  %9, %20, %6;\n\t" // Uses top
+         "madc.hi.u32     %7,  %8, %22,  0;\n\t" // Uses top
+
+         "mad.lo.cc.u32   %3, %10, %17, %3;\n\t"
+         "madc.lo.cc.u32  %4,  %8, %20, %4;\n\t" // Uses top
+         "madc.hi.cc.u32  %5, %11, %17, %5;\n\t"
+         "madc.hi.cc.u32  %6, %10, %19, %6;\n\t"
+         "madc.hi.u32     %7,  %9, %21, %7;\n\t" // Uses top
+
+         "mad.lo.cc.u32   %3, %11, %16, %3;\n\t"
+         "madc.lo.cc.u32  %4,  %9, %19, %4;\n\t"
+         "madc.hi.cc.u32  %5, %12, %16, %5;\n\t" // Uses top
+         "madc.hi.cc.u32  %6, %11, %18, %6;\n\t"
+         "madc.hi.u32     %7, %10, %20, %7;\n\t" // Uses top
+
+         "mad.lo.cc.u32   %4, %10, %18, %4;\n\t"
+         "madc.lo.cc.u32  %5,  %8, %21, %5;\n\t" // Uses top
+         "madc.hi.cc.u32  %6, %12, %17, %6;\n\t" // Uses top
+         "madc.hi.u32     %7, %11, %19, %7;\n\t"
+
+         "mad.lo.cc.u32   %4, %11, %17, %4;\n\t"
+         "madc.lo.cc.u32  %5,  %9, %20, %5;\n\t" // Uses top
+         "madc.hi.cc.u32  %6, %13, %16, %6;\n\t" // Uses top
+         "madc.hi.u32     %7, %12, %18, %7;\n\t" // Uses top
+
+         "mad.lo.cc.u32   %4, %12, %16, %4;\n\t" // Uses top
+         "madc.lo.cc.u32  %5, %10, %19, %5;\n\t"
+         "madc.lo.cc.u32  %6,  %8, %22, %6;\n\t" // Uses top
+         "madc.hi.u32     %7, %13, %17, %7;\n\t" // Uses top
+
+         "mad.lo.cc.u32   %5, %11, %18, %5;\n\t"
+         "madc.lo.cc.u32  %6,  %9, %21, %6;\n\t" // Uses top
+         "madc.hi.u32     %7, %14, %16, %7;\n\t" // Uses top
+
+         "mad.lo.cc.u32   %5, %12, %17, %5;\n\t" // Uses top
+         "madc.lo.cc.u32  %6, %10, %20, %6;\n\t" // Uses top
+         "madc.lo.u32     %7,  %8, %23, %7;\n\t" // Uses top
+
+         "mad.lo.cc.u32   %5, %13, %16, %5;\n\t" // Uses top
+         "madc.lo.cc.u32  %6, %11, %19, %6;\n\t"
+         "madc.lo.u32     %7,  %9, %22, %7;\n\t" // Uses top
+
+         "mad.lo.cc.u32   %6, %12, %18, %6;\n\t" // Uses top
+         "madc.lo.u32     %7, %10, %21, %7;\n\t" // Uses top
+
+         "mad.lo.cc.u32   %6, %13, %17, %6;\n\t" // Uses top
+         "madc.lo.u32     %7, %11, %20, %7;\n\t" // Uses top
+
+         "mad.lo.cc.u32   %6, %14, %16, %6;\n\t" // Uses top
+         "madc.lo.u32     %7, %12, %19, %7;\n\t" // Uses top
+
+         "mad.lo.u32      %7, %13, %18, %7;\n\t" // Uses top
+
+         "mad.lo.u32      %7, %14, %17, %7;\n\t" // Uses top
+         
+         "mad.lo.u32      %7, %15, %16, %7;\n\t" // Uses top
+         "}"
+         : "=r"(res.limbs[0]), "=r"(res.limbs[1]), "=r"(res.limbs[2]), "=r"(res.limbs[3]), "=r"(res.limbs[4]), "=r"(res.limbs[5]), "=r"(res.limbs[6]), "=r"(res.limbs[7])
+         : "r"(a.limbs[0]), "r"(a.limbs[1]), "r"(a.limbs[2]), "r"(a.limbs[3]),"r"(a.limbs[4]), "r"(a.limbs[5]), "r"(a.limbs[6]), "r"(a.limbs[7]),
+           "r"(b.limbs[0]), "r"(b.limbs[1]), "r"(b.limbs[2]), "r"(b.limbs[3]),"r"(b.limbs[4]), "r"(b.limbs[5]), "r"(b.limbs[6]), "r"(b.limbs[7]));
+    return res;
+}
+
+//modified from https://devtalk.nvidia.com/default/topic/610914/cuda-programming-and-performance/modular-exponentiation-amp-biginteger/
+__device__ __forceinline__ bigint_t umul_256_128in (halfbigint_t a, halfbigint_t b)
+{
+    bigint_t res;
+    //old top 12 13 14 15, 20 21 22 23
+    asm ("{\n\t"
+         "mul.lo.u32      %0,  %8, %12;    \n\t"
+
+         "mul.hi.u32      %1,  %8, %12;    \n\t"
+
+         "mad.lo.cc.u32   %1,  %8, %13, %1;\n\t"
+         "madc.hi.u32     %2,  %8, %13,  0;\n\t"
+
+         "mad.lo.cc.u32   %1,  %9, %12, %1;\n\t"
+         "madc.hi.cc.u32  %2,  %9, %12, %2;\n\t"
+         "madc.hi.u32     %3,  %8, %14,  0;\n\t"
+
+         "mad.lo.cc.u32   %2,  %8, %14, %2;\n\t"
+         "madc.hi.cc.u32  %3,  %9, %13, %3;\n\t"
+         "madc.hi.u32     %4,  %8, %15,  0;\n\t"
+
+         "mad.lo.cc.u32   %2,  %9, %13, %2;\n\t"
+         "madc.hi.cc.u32  %3, %10, %12, %3;\n\t"
+         "madc.hi.cc.u32  %4,  %9, %14, %4;\n\t"
+         //"madc.hi.u32     %5,  %8,   0,  0;\n\t" // Uses top
+           "addc.u32      %5,0,0;\n\t"
+
+         "mad.lo.cc.u32   %2, %10, %12, %2;\n\t"
+         "madc.lo.cc.u32  %3,  %8, %15, %3;\n\t"
+         "madc.hi.cc.u32  %4, %10, %13, %4;\n\t"
+         "madc.hi.cc.u32  %5,  %9, %15, %5;\n\t"
+         //"madc.hi.u32     %6,  %8,   0,  0;\n\t" // Uses top
+           "addc.u32      %6,0,0;\n\t"
+
+         "mad.lo.cc.u32   %3,  %9, %14, %3;\n\t"
+         "madc.hi.cc.u32  %4, %11, %12, %4;\n\t"
+         "madc.hi.cc.u32  %5, %10, %14, %5;\n\t"
+         //"madc.hi.cc.u32  %6,  %9,   0,  0;\n\t" // Uses top
+           "addc.u32      %6,%6,0;\n\t"
+         //"madc.hi.u32     %7,  %8,   0,  0;\n\t" // Uses top
+
+         "mad.lo.cc.u32   %3, %10, %13, %3;\n\t"
+         //"madc.lo.cc.u32  %4,  %8,   0, %4;\n\t" // Uses top
+           "addc.u32      %4,%4,0;\n\t"
+
+         "mad.hi.cc.u32   %5, %11, %13, %5;\n\t"
+         "madc.hi.cc.u32  %6, %10, %15, %6;\n\t"
+         //"madc.hi.u32     %7,  %9,   0, %7;\n\t" // Uses top
+           "addc.u32      %7,0,0;\n\t"
+
+         "mad.lo.cc.u32   %3, %11, %12, %3;\n\t"
+         "madc.lo.cc.u32  %4,  %9, %15, %4;\n\t"
+         //"madc.hi.cc.u32  %5,   0, %12, %5;\n\t" // Uses top
+           "addc.u32      %5,%5,0;\n\t"
+         "mad.hi.cc.u32  %6, %11, %14, %6;\n\t"
+         //"madc.hi.u32     %7, %10,   0, %7;\n\t" // Uses top
+     	   "addc.u32      %7,%7,0;\n\t"
+
+         "mad.lo.cc.u32   %4, %10, %14, %4;\n\t"
+         //"madc.lo.cc.u32  %5,  %8,   0, %5;\n\t" // Uses top
+           "addc.u32      %5,%5,0;\n\t"
+         //"madc.hi.cc.u32  %6,   0, %13, %6;\n\t" // Uses top
+         "mad.hi.u32     %7, %11, %15, %7;\n\t"
+
+         "mad.lo.cc.u32   %4, %11, %13, %4;\n\t"
+         //"madc.lo.cc.u32  %5,  %9,   0, %5;\n\t" // Uses top
+           "addc.u32      %5,%5,0;\n\t"
+         //"madc.hi.cc.u32  %6,   0, %12, %6;\n\t" // Uses top
+         //"madc.hi.u32     %7,   0, %14, %7;\n\t" // Uses top
+
+         //"mad.lo.cc.u32   %4,   0, %12, %4;\n\t" // Uses top
+         "mad.lo.cc.u32   %5, %10, %15, %5;\n\t"
+         //"madc.lo.cc.u32  %6,  %8,   0, %6;\n\t" // Uses top
+           "addc.u32      %6,%6,0;\n\t"
+         //"madc.hi.u32     %7,   0, %13, %7;\n\t" // Uses top
+
+         "mad.lo.cc.u32   %5, %11, %14, %5;\n\t"
+         //"madc.lo.cc.u32  %6,  %9,   0, %6;\n\t" // Uses top
+           "addc.u32      %6,%6,0;\n\t"
+         //"madc.hi.u32     %7,   0, %12, %7;\n\t" // Uses top
+
+         //"mad.lo.cc.u32   %5,   0, %13, %5;\n\t" // Uses top
+         //"madc.lo.cc.u32  %6, %10,   0, %6;\n\t" // Uses top
+         //"madc.lo.u32     %7,  %8,   0, %7;\n\t" // Uses top
+
+         //"mad.lo.cc.u32   %5,   0, %12, %5;\n\t" // Uses top
+         "mad.lo.cc.u32  %6, %11, %15, %6;\n\t"
+         //"madc.lo.u32     %7,  %9,   0, %7;\n\t" // Uses top
+           "addc.u32      %7,%7,0;\n\t"
+
+         //"mad.lo.cc.u32   %6,   0, %14, %6;\n\t" // Uses top
+         //"madc.lo.u32     %7, %10,   0, %7;\n\t" // Uses top
+
+         //"mad.lo.cc.u32   %6,   0, %13, %6;\n\t" // Uses top
+         //"madc.lo.u32     %7, %11,   0, %7;\n\t" // Uses top
+
+         //"mad.lo.cc.u32   %6,   0, %12, %6;\n\t" // Uses top
+         //"madc.lo.u32     %7,   0, %15, %7;\n\t" // Uses top
+
+         //"mad.lo.u32      %7,   0, %14, %7;\n\t" // Uses top
+
+         //"mad.lo.u32      %7,   0, %13, %7;\n\t" // Uses top
+
+         //"mad.lo.u32      %7,   0, %12, %7;\n\t" // Uses top
+         "}"
+         : "=r"(res.limbs[0]), "=r"(res.limbs[1]), "=r"(res.limbs[2]), "=r"(res.limbs[3]), "=r"(res.limbs[4]), "=r"(res.limbs[5]), "=r"(res.limbs[6]), "=r"(res.limbs[7])
+         : "r"(a.limbs[0]), "r"(a.limbs[1]), "r"(a.limbs[2]), "r"(a.limbs[3]),
+           "r"(b.limbs[0]), "r"(b.limbs[1]), "r"(b.limbs[2]), "r"(b.limbs[3]));
+    return res;
+}
+
+
+__global__ void genmpoints_on_GPU_fast (
+	unsigned hashsteps,
+	halfbigint_t c,
+	bigint_t point_preload,
+	uint32_t diff,
+	unsigned N,
+	const uint32_t* const __restrict__ indexbank,
+	bigint_t* const __restrict__ mpointsout
+){
+
+	int ID = blockIdx.x * blockDim.x + threadIdx.x;
+	if(ID < N){
+
+		bigint_t points[2];
+
+		for (int isdiff = 0; isdiff <= 1 ; isdiff++)
+		{
+
+			points[isdiff] = point_preload;
+			points[isdiff].limbs[0] = indexbank[ID] + isdiff*diff;
+
+			for (int i = 0; i < hashsteps; i++)
+			{
+				
+				bigint_t tmp;
+				halfbigint_t lox = {{ points[isdiff].limbs[0], points[isdiff].limbs[1], points[isdiff].limbs[2], points[isdiff].limbs[3] }};
+				halfbigint_t hix = {{ points[isdiff].limbs[4], points[isdiff].limbs[5], points[isdiff].limbs[6], points[isdiff].limbs[7] }};
+
+				//bigint_t loxtest = {{points[isdiff].limbs[0], points[isdiff].limbs[1], points[isdiff].limbs[2], points[isdiff].limbs[3],  0,0,0,0 }};
+				//bigint_t ctest = {{ c.limbs[0], c.limbs[1], c.limbs[2], c.limbs[3], 0,0,0,0 }};
+
+
+				// tmp=lo(x)*c;
+				tmp = umul_256_128in(lox, c);
+				//bigint_t tmp2 = umul256(loxtest, ctest);
+
+				//bool eq[8];
+				//for (int j = 0; j < 8; j++)
+				//{
+				//	eq[j] = tmp.limbs[j] == tmp2.limbs[j];
+				//}
+
+				// x=tmp+hi(x)
+				points[isdiff] = add256(tmp, hix);
+
+				// overall:  tmp=lo(x)*c; x=tmp+hi(x)
+			}
+
+		}
+
+		bigint_t mpoint;
+		for (int i = 0; i < 8; i++)
+		{
+			mpoint.limbs[i] = points[0].limbs[i] ^ points[1].limbs[i];
+		}
+
+		mpointsout[ID] = mpoint;
+	}
+
+}
+
+struct bigint_t_less : public thrust::binary_function<bigint_t,bigint_t,bool>
+{
+
+	const unsigned len;
+	bigint_t_less(const unsigned lenin):len(lenin) {}
+
+  /*! Function call operator. The return value is <tt>lhs < rhs</tt>.
+   */
+  __host__ __device__ bool operator()(const bigint_t &lhs, const bigint_t &rhs) const {
+	  //return lhs < rhs;
+
+	  for (int i = len-1; i >= 0; i--)
+	  {
+		  if(lhs.limbs[i] < rhs.limbs[i])
+			  return true;
+
+		  if(lhs.limbs[i] > rhs.limbs[i])
+			  return false;
+	  }
+
+	  //all equal, so not strictly less than
+	  return false;
+
+  }
+}; // end less
+
+struct bigint_t_less_idx : public thrust::binary_function<uint32_t,uint32_t,bool>
+{
+
+	const unsigned len;
+	const bigint_t* const theBigint;
+	bigint_t_less_idx(const unsigned lenin, const bigint_t* const theBigintin):len(lenin), theBigint(theBigintin) {}
+
+  /*! Function call operator. The return value is <tt>lhs < rhs</tt>.
+   */
+  __host__ __device__ bool operator()(const uint32_t &lhs, const uint32_t &rhs) const {
+	  //return lhs < rhs;
+
+	  for (int i = len-1; i >= 0; i--)
+	  {
+		  if(theBigint[lhs].limbs[i] < theBigint[rhs].limbs[i])
+			  return true;
+
+		  if(theBigint[lhs].limbs[i] > theBigint[rhs].limbs[i])
+			  return false;
+	  }
+
+	  //all equal, so not strictly less than
+	  return false;
+
+  }
+}; // end less
+
+
+
+int testcuda();
+
+
+__global__ void unzip_struct(
+	const uint32_t N,
+	const uint32_t depth,
+	const uint32_t* const __restrict__ map,
+	const bigint_t* const __restrict__ mpointsin,
+	uint32_t* const __restrict__ unzipout
+){
+	int ID = blockIdx.x * blockDim.x + threadIdx.x;
+	if(ID < N){
+		unzipout[ID] = mpointsin[map[ID]].limbs[depth];
+	}
+}
+
+
 namespace bitecoin{
 
-	//TODO: zip into vector of pairs in place
+
+	std::vector<bigint_t> genmpoints_on_GPU_fast_wrapper (
+		const unsigned hashsteps,
+		const halfbigint_t c,
+		const bigint_t point_preload,
+		const uint32_t diff,
+		const std::vector<uint32_t> &indexbank
+	){
+
+		cudaError e;
+		unsigned N = indexbank.size();
+
+		uint32_t* idxbankGPU;
+		if(e = cudaMalloc(&idxbankGPU, N * sizeof(uint32_t))) fprintf(stderr, "Cuda error %d on line %d\n", e, __LINE__);
+		bigint_t* mpointsGPU;
+		if(e = cudaMalloc(&mpointsGPU, N * sizeof(bigint_t))) fprintf(stderr, "Cuda error %d on line %d\n", e, __LINE__);
+
+		if(e = cudaMemcpy(idxbankGPU, indexbank.data(), N * sizeof(uint32_t), cudaMemcpyHostToDevice))  fprintf(stderr, "Cuda error %d on line %d\n", e, __LINE__);
+
+		//gen
+		unsigned nblocks = std::ceil((double)N/128);
+		genmpoints_on_GPU_fast <<<nblocks, 128>>> (hashsteps, c, point_preload, diff, N, idxbankGPU, mpointsGPU);
+		
+		//testcuda();
+
+		//sort
+
+		auto mpointsGPUtptr = thrust::device_pointer_cast(mpointsGPU);
+		//auto idxbankGPUtptr = thrust::device_pointer_cast(idxbankGPU);
+		//thrust::sort_by_key(mpointsGPUtptr, mpointsGPUtptr + N, idxbankGPUtptr, bigint_t_less(8));
+
+		//thrust::device_vector<uint32_t> derefidx(N);
+		//thrust::sequence(derefidx.begin(), derefidx.end());
+		//thrust::sort(derefidx.begin(), derefidx.end(), bigint_t_less_idx(8, mpointsGPU));
+
+		uint32_t* map;
+		if(e = cudaMalloc(&map, N * sizeof(uint32_t))) fprintf(stderr, "Cuda error %d on line %d\n", e, __LINE__);
+		auto maptptr = thrust::device_pointer_cast(map);
+		thrust::sequence(maptptr, maptptr+N);
+
+		uint32_t* currlimb;
+		if(e = cudaMalloc(&currlimb, N * sizeof(uint32_t))) fprintf(stderr, "Cuda error %d on line %d\n", e, __LINE__);
+		auto currlimbptr = thrust::device_pointer_cast(currlimb);
+
+		for (int i = 0; i < 8; i++)
+		{
+			unzip_struct <<<nblocks, 128>>> (N,i,map,mpointsGPU,currlimb);
+			thrust::stable_sort_by_key(currlimbptr, currlimbptr+N, maptptr);
+		}
+
+		thrust::sort_by_key(maptptr, maptptr+N, mpointsGPUtptr);
+
+		std::vector<bigint_t> mpointsHost(N);
+		if(e = cudaMemcpy(mpointsHost.data(), mpointsGPU, N * sizeof(bigint_t), cudaMemcpyDeviceToHost)) fprintf(stderr, "Cuda error %d on line %d\n", e, __LINE__);
+	
+		cudaFree(idxbankGPU);
+		cudaFree(mpointsGPU);
+
+		return mpointsHost;
+	}
+
+
 	std::vector<wide_as_pair> genmpoints_on_GPU (
 		unsigned hashsteps,
 		const uint32_t* const c,

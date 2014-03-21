@@ -16,21 +16,25 @@
 #include "bitecoin_protocol.hpp"
 #include "bitecoin_log.hpp"
 
+	
+// The size of the multi-word types we use in hashing
+enum{ NLIMBS = bitecoin::BIGINT_WORDS };
+
+// Convenience wrapper around a multi-word type
+struct bigint_t
+{
+	uint32_t limbs[NLIMBS];
+};
+struct halfbigint_t
+{
+	uint32_t limbs[4];
+};
+	
+
 namespace bitecoin{
+
 	
-	// The size of the multi-word types we use in hashing
-	enum{ NLIMBS = BIGINT_WORDS };
-	
-	// Convenience wrapper around a multi-word type
-	struct bigint_t
-	{
-		uint32_t limbs[NLIMBS];
-	};
-	struct halfbigint_t
-	{
-		uint32_t limbs[4];
-	};
-	
+
 	// This provides a primitive randomness step. It is not cryptographic quality,
 	// but suffices for these purposes. There is a constant c that comes from the
 	// server at the beginning of the round that gets used here.

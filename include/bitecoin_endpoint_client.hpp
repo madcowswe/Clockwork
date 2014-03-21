@@ -39,10 +39,19 @@ namespace bitecoin{
 	std::vector<wide_as_pair> genmpoints_on_GPU (
 		unsigned hashsteps,
 		const uint32_t* const c,
-		const uint32_t* const,
+		const uint32_t* const point_preload,
 		const std::vector<uint32_t> &indexbank,
 		unsigned diff
 	);
+
+	std::vector<bigint_t> genmpoints_on_GPU_fast_wrapper (
+		const unsigned hashsteps,
+		const halfbigint_t c,
+		const bigint_t point_preload,
+		const uint32_t diff,
+		const std::vector<uint32_t> &indexbank
+	);
+
 #endif
 
 	struct metapoint
@@ -274,20 +283,69 @@ public:
 					//idxbank[i+1] = idxbank[i] + diff;
 				}
 
-				std::vector<wide_as_pair> pointbank = genmpoints_on_GPU(
-					roundInfo->hashSteps, roundInfo->c,
-					point_preload.limbs,
-					idxbank,
-					diff
-				);
+				//std::vector<wide_as_pair> pointbank = genmpoints_on_GPU(
+				//	roundInfo->hashSteps, roundInfo->c,
+				//	point_preload.limbs,
+				//	idxbank,
+				//	diff
+				//);
+
+				halfbigint_t chbi = {{roundInfo->c[0], roundInfo->c[1], roundInfo->c[2], roundInfo->c[3] }};
+				std::vector<bigint_t> pointbank2 = genmpoints_on_GPU_fast_wrapper(roundInfo->hashSteps, chbi, point_preload, diff, idxbank);
 
 				for (unsigned i = 0; i < Nss; i++)
 				{
+					bigint_t metapoint = pointbank2[i];
 					wide_idx_pair_4 newMetapoint;
-					newMetapoint.first = pointbank[i];
+
+					newMetapoint.first.first = std::make_pair(
+						((uint64_t)metapoint.limbs[7] << 32) + metapoint.limbs[6],
+						((uint64_t)metapoint.limbs[5] << 32) + metapoint.limbs[4]);
+					newMetapoint.first.second = std::make_pair(
+						((uint64_t)metapoint.limbs[3] << 32) + metapoint.limbs[2],
+						((uint64_t)metapoint.limbs[1] << 32) + metapoint.limbs[0]);
+
 					newMetapoint.second[0] = idxbank[i];
 					M1pointIdxBank.push_back(newMetapoint);
 				}
+
+//#define CHECKGEN
+#ifdef CHECKGEN
+				//check
+				std::vector<wide_idx_pair_4> M1pointIdxBankCHECK;
+				M1pointIdxBankCHECK.reserve(Nss);
+				for (unsigned i = 0; i < Nss; i++)
+				{
+					uint32_t idx1 = idxbank[i];
+					bigint_t point1 = pointFromIdx(roundInfo.get(), point_preload, idx1);
+
+					uint32_t idx2 = idx1 + diff;
+					bigint_t point2 = pointFromIdx(roundInfo.get(), point_preload, idx2);
+
+					bigint_t metapoint;
+					wide_xor(8, metapoint.limbs, point1.limbs, point2.limbs);
+
+					wide_idx_pair_4 newMetapoint;
+					
+					newMetapoint.first.first = std::make_pair(
+						((uint64_t)metapoint.limbs[7] << 32) + metapoint.limbs[6],
+						((uint64_t)metapoint.limbs[5] << 32) + metapoint.limbs[4]);
+					newMetapoint.first.second = std::make_pair(
+						((uint64_t)metapoint.limbs[3] << 32) + metapoint.limbs[2],
+						((uint64_t)metapoint.limbs[1] << 32) + metapoint.limbs[0]);
+
+					newMetapoint.second[0] = idx1;
+
+					assert(newMetapoint == M1pointIdxBank[i]);
+					for (int j = 0; j < 8; j++)
+					{
+						assert(metapoint.limbs[j] == pointbank2[i].limbs[j]);
+					}
+
+					M1pointIdxBankCHECK.push_back(newMetapoint);
+				}
+#endif
+
 #endif
 
 				double tic2 = now()*1e-9;
