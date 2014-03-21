@@ -425,6 +425,7 @@ public:
 					break;
 				}
 			}
+
 			std::sort(besti.begin(), besti.begin() + enabledIndicies);
 
 			bigint_t proof = HashReferencewPreload(roundInfo.get(), point_preload, enabledIndicies, &besti[0]);
