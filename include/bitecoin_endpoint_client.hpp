@@ -126,7 +126,7 @@ public:
 		uint32_t GoldenDiff = 0;
 		if (diffCache.find(key) == diffCache.end())
 		{
-			//for (unsigned i = 0; i < Ngd; i++)
+
 			tbb::parallel_for((unsigned)0, Ngd, [&](unsigned i) {
 				uint32_t curridx = fastrand();
 				bigint_t point = point_preload;
@@ -146,17 +146,14 @@ public:
 			tbb::parallel_sort(pointidxbank.begin(), pointidxbank.end());
 						
 			uint64_t bestdistance = -1;
-			//unsigned skipcount = 0;
 			unsigned overloadcount = 0;
 			for (unsigned i = 0; i < Ngd - 1u; i++)
 			{
 				uint32_t aidx = pointidxbank[i].second;
 				uint32_t bidx = pointidxbank[i + 1].second;
-				if (aidx == bidx)
-				{
-					//skipcount++;
+				if (aidx == bidx)				
 					continue;
-				}
+				
 
 				uint64_t a = pointidxbank[i].first;
 				uint64_t b = pointidxbank[i + 1].first;
@@ -219,6 +216,7 @@ public:
 		unsigned maxIdx = roundInfo.get()->maxIndices;
 
 		while(1){
+			//Negative feedback loop which changes Nss with respsect to the time remaining
 			unsigned Nss = 0.8 * std::max(timeBudget,0.) * hashrate/roundInfo->hashSteps;
 			if (Nss == 0)
 			{
@@ -230,19 +228,22 @@ public:
 			
 			Log(Log_Debug, "Trial %d.", nTrials);
 
+			//Nmber of indicies of the final solution
 			int enabledIndicies = 2;
+
+			//Best indicies
 			std::array<uint32_t, 16> besti;
-
-
+			
 			if (maxIdx >= 4) 
 			{
 				enabledIndicies = 4;
+				//Metapoint-index banks
 				std::vector<wide_idx_pair_4> M1pointIdxBank;
 				std::vector<wide_idx_pair_4> M2pointIdxBank;
 				std::vector<wide_idx_pair_4> M3pointIdxBank;
 				std::vector<wide_idx_pair_4>* currentBank = &M1pointIdxBank;
 
-
+				//Algorithmic overview
 				//2 depth:	Generate indicies
 				//			Generate points from indicies
 				//			XOR to make meta-points
@@ -256,12 +257,15 @@ public:
 				//			Sort
 				//
 
-				//gen
-				unsigned diff = GoldenDiff;//0x94632009;
+				
+				unsigned diff = GoldenDiff;
+				
+				//For the RNG
 				std::uniform_int_distribution<uint32_t> uniform_baserange(0u, (uint32_t)(-1) - diff);
-				//M1pointIdxBank.reserve(Nss);
+
+				//First meta index-point bank
 				M1pointIdxBank.resize(Nss);
-				//for (unsigned i = 0; i < Nss; i++)
+
 				tbb::parallel_for((unsigned)0, Nss, [&](unsigned i)	
 				{
 					uint32_t idx1 = uniform_baserange(rand_engine);
@@ -284,8 +288,8 @@ public:
 						((uint64_t)metapoint.limbs[1] << 32) + metapoint.limbs[0]);
 
 					newMetapoint.second[0] = idx1;
-
-					//M1pointIdxBank.push_back(newMetapoint);
+					//idx1 + goldenDiff is implied
+										
 					M1pointIdxBank[i] = newMetapoint;
 				});
 
@@ -312,7 +316,6 @@ public:
 					//unsigned skipcount = 0;
 					
 					//Depth 3:
-					//for (int i = 0; i < workingBankSize; i++)
 					tbb::parallel_for((int)0, workingBankSize, [&](int i)				
 					{
 						
@@ -325,12 +328,6 @@ public:
 
 						if (x == indicies.end())
 						{
-						//	//Log(Log_Verbose, "Skipped index:%d", i);
-						//	//skipcount++;
-						//	continue;
-						//}
-						//else {
-
 							auto a = M1pointIdxBank[i].first;
 							auto b = M1pointIdxBank[i + 1].first;
 							auto currmmpoint = wap_xor(a, b);
@@ -362,10 +359,8 @@ public:
 					//unsigned skipcount1 = 0;
 					enabledIndicies = 16;
 					currentBank = &M3pointIdxBank;
-					//M3pointIdxBank.reserve(workingBankSize);
 					M3pointIdxBank.resize(workingBankSize);
 
-					//for (int i = 0; i < workingBankSize; i++)
 					tbb::parallel_for((int)0, workingBankSize, [&](int i)
 					{
 						uint32_t aidx1 = M2pointIdxBank[i].second[0];
@@ -400,8 +395,6 @@ public:
 
 					});
 
-					//Log(Log_Debug, "Third loop. Skipped %d", skipcount1);
-
 					tbb::parallel_sort(M3pointIdxBank.begin(), M3pointIdxBank.end());
 
 					Log(Log_Debug, "Third loop");
@@ -410,7 +403,6 @@ public:
 				} while (0);
 
 				unsigned overloadcount = 0;
-				unsigned skipcount2 = 0;
 				wide_as_pair bestmmpoint = std::make_pair(std::make_pair(-1ull, -1ull), std::make_pair(-1ull, -1ull));
 				
 				bool bestivalid = 0;
@@ -434,11 +426,9 @@ public:
 					std::sort(indicies.begin(), indicies.begin() + enabledIndicies);
 					auto x = std::adjacent_find(indicies.begin(), indicies.begin() + enabledIndicies);
 
-					if (x != indicies.begin() + enabledIndicies)
-					{
-						skipcount2++;
+					if (x != indicies.begin() + enabledIndicies)					
 						continue;
-					}
+					
 
 					auto currmmpoint = wap_xor((*currentBank)[i].first, (*currentBank)[i + 1].first);
 
@@ -455,8 +445,6 @@ public:
 						}
 					}
 				}
-
-				//}
 				
 				//And now we do meta-meta points
 				double tocscan = now()*1e-9;
@@ -464,9 +452,8 @@ public:
 					Log(Log_Verbose, "sort-scan :%g", (tocscan - tic2));
 				else
 					Log(Log_Debug, "sort-scan :%g",  (tocscan - tic2));
-				Log(Log_Debug, "Final pass: Skipped %u inclusive idx, Overload %u", skipcount2, overloadcount);
-				//Log(Log_Verbose, "\nAmazing tom\n");
-
+				//Log(Log_Debug, "Final pass: Skipped %u inclusive idx, Overload %u", skipcount2, overloadcount);
+				
 				if (!bestivalid)
 				{
 					break;
@@ -475,6 +462,7 @@ public:
 
 			std::sort(besti.begin(), besti.begin() + enabledIndicies);
 
+			//generate the proof
 			bigint_t proof = HashReferencewPreload(roundInfo.get(), point_preload, enabledIndicies, &besti[0]);
 
 			//Number of idx
