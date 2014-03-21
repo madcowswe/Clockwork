@@ -215,8 +215,6 @@ public:
 				std::vector<wide_idx_pair_4> M2pointIdxBank;
 				std::vector<wide_idx_pair_4> M3pointIdxBank;
 				std::vector<wide_idx_pair_4>* currentBank = &M1pointIdxBank;
-				
-				double tic1 = now();
 
 
 				//0 depth:	Generate indicies
@@ -262,8 +260,11 @@ public:
 					M1pointIdxBank.push_back(newMetapoint);
 				}
 
-				double tic2 = now();
-				Log(Log_Debug, "First loop:%g", (tic2 - tic1)*1e-9);
+				double tic2 = now()*1e-9;
+				if((tic2 - tic) > 0.1*timeBudgetInital)
+					Log(Log_Verbose, "gen :%g", (tic2 - tic));
+				else
+					Log(Log_Debug, "gen :%g", (tic2 - tic));
 
 				//sort
 				std::sort(M1pointIdxBank.begin(), M1pointIdxBank.end());
@@ -423,6 +424,11 @@ public:
 				//}
 
 				//And now we do meta-meta points
+				double tocscan = now()*1e-9;
+				if((tocscan - tic2) > 0.1*timeBudgetInital)
+					Log(Log_Verbose, "sort-scan :%g", (tocscan - tic2));
+				else
+					Log(Log_Debug, "sort-scan :%g",  (tocscan - tic2));
 				Log(Log_Debug, "Final pass: Skipped %u inclusive idx, Overload %u", skipcount2, overloadcount);
 				//Log(Log_Verbose, "\nAmazing tom\n");
 
