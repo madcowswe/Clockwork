@@ -640,6 +640,13 @@ namespace bitecoin{
 
 		uint32_t* idxbankGPU;
 		if(e = cudaMalloc(&idxbankGPU, N * sizeof(uint32_t))) fprintf(stderr, "Cuda error %d on line %d\n", e, __LINE__);
+		if(e = cudaMemcpy(idxbankGPU, indexbank.data(), N * sizeof(uint32_t), cudaMemcpyHostToDevice))  fprintf(stderr, "Cuda error %d on line %d\n", e, __LINE__);
+
+		// indicies* idxa, *idxb;
+		// if(e = cudaMalloc(&idxa, N * sizeof(indicies))) fprintf(stderr, "Cuda error %d on line %d\n", e, __LINE__);
+		// if(e = cudaMalloc(&idxb, N * sizeof(indicies))) fprintf(stderr, "Cuda error %d on line %d\n", e, __LINE__);
+		// auto idxaptr = thrust::device_pointer_cast(idxa);
+		// auto idxbptr = thrust::device_pointer_cast(idxb);
 
 		bigint_t* mpointsGPUa, *mpointsGPUb;
 		if(e = cudaMalloc(&mpointsGPUa, N * sizeof(bigint_t))) fprintf(stderr, "Cuda error %d on line %d\n", e, __LINE__);
@@ -647,24 +654,19 @@ namespace bitecoin{
 		auto mpointsGPUtptra = thrust::device_pointer_cast(mpointsGPUa);
 		auto mpointsGPUtptrb = thrust::device_pointer_cast(mpointsGPUb);
 
-		if(e = cudaMemcpy(idxbankGPU, indexbank.data(), N * sizeof(uint32_t), cudaMemcpyHostToDevice))  fprintf(stderr, "Cuda error %d on line %d\n", e, __LINE__);
-		indicies* idxa, *idxb;
-		if(e = cudaMalloc(&idxa, N * sizeof(indicies))) fprintf(stderr, "Cuda error %d on line %d\n", e, __LINE__);
-		if(e = cudaMalloc(&idxb, N * sizeof(indicies))) fprintf(stderr, "Cuda error %d on line %d\n", e, __LINE__);
-		auto idxaptr = thrust::device_pointer_cast(idxa);
-		auto idxbptr = thrust::device_pointer_cast(idxb);
-
 		//gen
+
 		unsigned nblocks = std::ceil((double)N/128);
 		genmpoints_on_GPU_fast <<<nblocks, 128>>> (hashsteps, c, point_preload, diff, N, idxbankGPU, mpointsGPUa);
 		if(e = cudaGetLastError()) printf("Cuda error %d on line %d\n", e, __LINE__);
-		shove_flat_idx_into_struct(N, idxbankGPU, idxa);
+		//shove_flat_idx_into_struct <<<nblocks, 128>>> (N, idxbankGPU, idxa);
 
 		//sort
 
 		uint32_t* map;
 		if(e = cudaMalloc(&map, N * sizeof(uint32_t))) fprintf(stderr, "Cuda error %d on line %d\n", e, __LINE__);
 		auto maptptr = thrust::device_pointer_cast(map);
+
 		thrust::sequence(maptptr, maptptr+N);
 
 		uint32_t* currlimb;
@@ -678,33 +680,28 @@ namespace bitecoin{
 			thrust::stable_sort_by_key(currlimbptr, currlimbptr+N, maptptr);
 		}
 
-		thrust::device_vector<bigint_t> mpointsGPUoutvec(N);
-		auto mptsGPUoutvecRaw = thrust::raw_pointer_cast(mpointsGPUoutvec.data());
-
 		//gather sort results
-		thrust::gather(maptptr, maptptr+N, mpointsGPUtptra, mpointsGPUtptrb));
-		thrust::gather(maptptr, maptptr+N, idxaptr, idxbptr);
+		thrust::gather(maptptr, maptptr+N, mpointsGPUtptra, mpointsGPUtptrb);
+		//thrust::gather(maptptr, maptptr+N, idxaptr, idxbptr);
 
-
-		//xor
-		bigint_t* m2pointsGPU;
-		if(e = cudaMalloc(&m2pointsGPU, N * sizeof(m2pointsGPU))) fprintf(stderr, "Cuda error %d on line %d\n", e, __LINE__);
-
-		xor_points_unconditional(N, 8, 1, mptsGPUoutvecRaw, m2pointsGPU, idxa, idxb);
+		//xor_points_unconditional(N, 8, 1, mptsGPUoutvecRaw, m2pointsGPU, idxa, idxb);
 		//std::swap(idxa,idxb);
 		//std::swap(m2pointsGPU, mpointsGPU);
-
 
 		//DEBUG
 		//std::vector<uint32_t> testmap(N);
 		//if(e = cudaMemcpy(testmap.data(), map, N * sizeof(uint32_t), cudaMemcpyDeviceToHost))  fprintf(stderr, "Cuda error %d on line %d\n", e, __LINE__);
 
 		std::vector<bigint_t> mpointsHost(N);
-		
-		if(e = cudaMemcpy(mpointsHost.data(), mptsGPUoutvecRaw, N * sizeof(bigint_t), cudaMemcpyDeviceToHost)) fprintf(stderr, "Cuda error %d on line %d\n", e, __LINE__);
-	
+		if(e = cudaMemcpy(mpointsHost.data(), mpointsGPUb, N * sizeof(bigint_t), cudaMemcpyDeviceToHost)) fprintf(stderr, "Cuda error %d on line %d\n", e, __LINE__);
+
 		cudaFree(idxbankGPU);
-		cudaFree(mpointsGPU);
+		//cudaFree(idxa);
+		//cudaFree(idxb);
+		cudaFree(mpointsGPUa);
+		cudaFree(mpointsGPUb);
+		cudaFree(map);
+		cudaFree(currlimb);
 
 		return mpointsHost;
 	}
