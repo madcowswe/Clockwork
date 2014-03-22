@@ -573,6 +573,57 @@ __global__ void unzip_struct(
 }
 
 
+//Diff implicit!
+struct indicies
+{
+	uint32_t parts[8];
+};
+
+struct point_idx{
+	bigint_t point;
+	indicies idx;
+};
+
+
+//set N = N-1 for each pass!!, npop should double
+__global__ void xor_points_unconditional(
+	const uint32_t N,
+	const uint32_t depth,
+	const uint32_t nPopulated,
+	const bigint_t* const __restrict__ xorin,
+	bigint_t* const __restrict__ xoredout,
+	const indicies* const __restrict__ idxin,
+	indicies* const __restrict__ idxout
+){
+	int ID = blockIdx.x * blockDim.x + threadIdx.x;
+	if(ID < N-1){
+		for (int i = 0; i < depth; i++)
+		{
+			xoredout[ID].limbs[i] = xorin[ID].limbs[i] ^ xorin[ID+1].limbs[i];
+		}
+
+		int j = 0;
+		for (int i = 0; i < nPopulated; i++)
+		{
+			idxout[ID].parts[j++] = idxin[ID].parts[i];
+			idxout[ID].parts[j++] = idxin[ID+1].parts[i];
+		}
+	}
+}
+
+
+__global__ void shove_flat_idx_into_struct(
+	const uint32_t N,
+	const uint32_t* const __restrict__ idxin,
+	indicies* const __restrict__ idxout
+){
+	int ID = blockIdx.x * blockDim.x + threadIdx.x;
+	if(ID < N){
+		idxout[ID].parts[0] = idxin[ID];
+	}
+};
+
+
 namespace bitecoin{
 
 
@@ -589,26 +640,27 @@ namespace bitecoin{
 
 		uint32_t* idxbankGPU;
 		if(e = cudaMalloc(&idxbankGPU, N * sizeof(uint32_t))) fprintf(stderr, "Cuda error %d on line %d\n", e, __LINE__);
-		bigint_t* mpointsGPU;
-		if(e = cudaMalloc(&mpointsGPU, N * sizeof(bigint_t))) fprintf(stderr, "Cuda error %d on line %d\n", e, __LINE__);
+
+		bigint_t* mpointsGPUa, *mpointsGPUb;
+		if(e = cudaMalloc(&mpointsGPUa, N * sizeof(bigint_t))) fprintf(stderr, "Cuda error %d on line %d\n", e, __LINE__);
+		if(e = cudaMalloc(&mpointsGPUb, N * sizeof(bigint_t))) fprintf(stderr, "Cuda error %d on line %d\n", e, __LINE__);
+		auto mpointsGPUtptra = thrust::device_pointer_cast(mpointsGPUa);
+		auto mpointsGPUtptrb = thrust::device_pointer_cast(mpointsGPUb);
 
 		if(e = cudaMemcpy(idxbankGPU, indexbank.data(), N * sizeof(uint32_t), cudaMemcpyHostToDevice))  fprintf(stderr, "Cuda error %d on line %d\n", e, __LINE__);
+		indicies* idxa, *idxb;
+		if(e = cudaMalloc(&idxa, N * sizeof(indicies))) fprintf(stderr, "Cuda error %d on line %d\n", e, __LINE__);
+		if(e = cudaMalloc(&idxb, N * sizeof(indicies))) fprintf(stderr, "Cuda error %d on line %d\n", e, __LINE__);
+		auto idxaptr = thrust::device_pointer_cast(idxa);
+		auto idxbptr = thrust::device_pointer_cast(idxb);
 
 		//gen
 		unsigned nblocks = std::ceil((double)N/128);
-		genmpoints_on_GPU_fast <<<nblocks, 128>>> (hashsteps, c, point_preload, diff, N, idxbankGPU, mpointsGPU);
-		
-		//testcuda();
+		genmpoints_on_GPU_fast <<<nblocks, 128>>> (hashsteps, c, point_preload, diff, N, idxbankGPU, mpointsGPUa);
+		if(e = cudaGetLastError()) printf("Cuda error %d on line %d\n", e, __LINE__);
+		shove_flat_idx_into_struct(N, idxbankGPU, idxa);
 
 		//sort
-
-		auto mpointsGPUtptr = thrust::device_pointer_cast(mpointsGPU);
-		//auto idxbankGPUtptr = thrust::device_pointer_cast(idxbankGPU);
-		//thrust::sort_by_key(mpointsGPUtptr, mpointsGPUtptr + N, idxbankGPUtptr, bigint_t_less(8));
-
-		//thrust::device_vector<uint32_t> derefidx(N);
-		//thrust::sequence(derefidx.begin(), derefidx.end());
-		//thrust::sort(derefidx.begin(), derefidx.end(), bigint_t_less_idx(8, mpointsGPU));
 
 		uint32_t* map;
 		if(e = cudaMalloc(&map, N * sizeof(uint32_t))) fprintf(stderr, "Cuda error %d on line %d\n", e, __LINE__);
@@ -619,16 +671,37 @@ namespace bitecoin{
 		if(e = cudaMalloc(&currlimb, N * sizeof(uint32_t))) fprintf(stderr, "Cuda error %d on line %d\n", e, __LINE__);
 		auto currlimbptr = thrust::device_pointer_cast(currlimb);
 
-		for (int i = 0; i < 8; i++)
+		for (int i = 0; i < 7; i++)
 		{
-			unzip_struct <<<nblocks, 128>>> (N,i,map,mpointsGPU,currlimb);
+			unzip_struct <<<nblocks, 128>>> (N,i,map,mpointsGPUa,currlimb);
+			if(e = cudaGetLastError()) printf("Cuda error %d on line %d\n", e, __LINE__);
 			thrust::stable_sort_by_key(currlimbptr, currlimbptr+N, maptptr);
 		}
 
-		thrust::sort_by_key(maptptr, maptptr+N, mpointsGPUtptr);
+		thrust::device_vector<bigint_t> mpointsGPUoutvec(N);
+		auto mptsGPUoutvecRaw = thrust::raw_pointer_cast(mpointsGPUoutvec.data());
+
+		//gather sort results
+		thrust::gather(maptptr, maptptr+N, mpointsGPUtptra, mpointsGPUtptrb));
+		thrust::gather(maptptr, maptptr+N, idxaptr, idxbptr);
+
+
+		//xor
+		bigint_t* m2pointsGPU;
+		if(e = cudaMalloc(&m2pointsGPU, N * sizeof(m2pointsGPU))) fprintf(stderr, "Cuda error %d on line %d\n", e, __LINE__);
+
+		xor_points_unconditional(N, 8, 1, mptsGPUoutvecRaw, m2pointsGPU, idxa, idxb);
+		//std::swap(idxa,idxb);
+		//std::swap(m2pointsGPU, mpointsGPU);
+
+
+		//DEBUG
+		//std::vector<uint32_t> testmap(N);
+		//if(e = cudaMemcpy(testmap.data(), map, N * sizeof(uint32_t), cudaMemcpyDeviceToHost))  fprintf(stderr, "Cuda error %d on line %d\n", e, __LINE__);
 
 		std::vector<bigint_t> mpointsHost(N);
-		if(e = cudaMemcpy(mpointsHost.data(), mpointsGPU, N * sizeof(bigint_t), cudaMemcpyDeviceToHost)) fprintf(stderr, "Cuda error %d on line %d\n", e, __LINE__);
+		
+		if(e = cudaMemcpy(mpointsHost.data(), mptsGPUoutvecRaw, N * sizeof(bigint_t), cudaMemcpyDeviceToHost)) fprintf(stderr, "Cuda error %d on line %d\n", e, __LINE__);
 	
 		cudaFree(idxbankGPU);
 		cudaFree(mpointsGPU);
