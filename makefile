@@ -27,6 +27,7 @@ CPPFLAGS += -I $(Cuda_INC_DIR)
 LDFLAGS += -L $(Cuda_LIB_DIR)
 LDLIBS += -lcudart
 
+
 # Launch client and server connected by pipes
 launch_pipes : src/bitecoin_server src/bitecoin_client
 	-rm .fifo_rev

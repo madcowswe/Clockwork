@@ -627,7 +627,7 @@ __global__ void shove_flat_idx_into_struct(
 namespace bitecoin{
 
 
-	std::vector<bigint_t> genmpoints_on_GPU_fast_wrapper (
+	std::pair<std::vector<bigint_t>, std::vector<uint32_t>> gensort_GPU (
 		const unsigned hashsteps,
 		const halfbigint_t c,
 		const bigint_t point_preload,
@@ -638,8 +638,9 @@ namespace bitecoin{
 		cudaError e;
 		unsigned N = indexbank.size();
 
-		uint32_t* idxbankGPU;
+		uint32_t* idxbankGPU, *idxbankGPUout;
 		if(e = cudaMalloc(&idxbankGPU, N * sizeof(uint32_t))) fprintf(stderr, "Cuda error %d on line %d\n", e, __LINE__);
+		if(e = cudaMalloc(&idxbankGPUout, N * sizeof(uint32_t))) fprintf(stderr, "Cuda error %d on line %d\n", e, __LINE__);
 		if(e = cudaMemcpy(idxbankGPU, indexbank.data(), N * sizeof(uint32_t), cudaMemcpyHostToDevice))  fprintf(stderr, "Cuda error %d on line %d\n", e, __LINE__);
 
 		// indicies* idxa, *idxb;
@@ -682,7 +683,10 @@ namespace bitecoin{
 
 		//gather sort results
 		thrust::gather(maptptr, maptptr+N, mpointsGPUtptra, mpointsGPUtptrb);
-		//thrust::gather(maptptr, maptptr+N, idxaptr, idxbptr);
+
+		auto idxbankGPUptr = thrust::device_pointer_cast(idxbankGPU);
+		auto idxbankGPUoutptr = thrust::device_pointer_cast(idxbankGPUout);
+		thrust::gather(maptptr, maptptr+N, idxbankGPUptr, idxbankGPUoutptr);
 
 		//xor_points_unconditional(N, 8, 1, mptsGPUoutvecRaw, m2pointsGPU, idxa, idxb);
 		//std::swap(idxa,idxb);
@@ -694,8 +698,11 @@ namespace bitecoin{
 
 		std::vector<bigint_t> mpointsHost(N);
 		if(e = cudaMemcpy(mpointsHost.data(), mpointsGPUb, N * sizeof(bigint_t), cudaMemcpyDeviceToHost)) fprintf(stderr, "Cuda error %d on line %d\n", e, __LINE__);
+		std::vector<uint32_t> idxHost(N);
+		if(e = cudaMemcpy(idxHost.data(), idxbankGPUout, N * sizeof(bigint_t), cudaMemcpyDeviceToHost)) fprintf(stderr, "Cuda error %d on line %d\n", e, __LINE__);
 
 		cudaFree(idxbankGPU);
+		cudaFree(idxbankGPUout);
 		//cudaFree(idxa);
 		//cudaFree(idxb);
 		cudaFree(mpointsGPUa);
@@ -703,7 +710,7 @@ namespace bitecoin{
 		cudaFree(map);
 		cudaFree(currlimb);
 
-		return mpointsHost;
+		return std::make_pair(mpointsHost, idxHost);
 	}
 
 

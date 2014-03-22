@@ -19,6 +19,7 @@
 #include "bitecoin_hashing.hpp"
 #include "wide_int.h"
 
+
 //#include "Clockwork.hpp"
 
 #include <wide_int.h>
@@ -26,6 +27,8 @@
 #include <random>
 
 #define USECUDA
+#include "tbb/parallel_sort.h"
+#include "tbb/parallel_for.h"
 
 #ifdef USECUDA
 #include <cuda_runtime.h>
@@ -44,7 +47,7 @@ namespace bitecoin{
 		unsigned diff
 	);
 
-	std::vector<bigint_t> genmpoints_on_GPU_fast_wrapper (
+	std::pair<std::vector<bigint_t>, std::vector<uint32_t>> gensort_GPU (
 		const unsigned hashsteps,
 		const halfbigint_t c,
 		const bigint_t point_preload,
@@ -96,6 +99,7 @@ public:
 		std::vector<uint32_t> &solution,												// Our vector of indices describing the solution
 		uint32_t *pProof																		// Will contain the "proof", which is just the value
 	){
+		static std::map<std::pair<uint32_t, std::array<uint32_t, BIGINT_WORDS / 2>>, uint32_t> diffCache;
 		double tSafetyMargin=0.5;	// accounts for uncertainty in network conditions
 		tSafetyMargin+=0.5;	// latency of banked algo
 		/* This is when the server has said all bids must be produced by, plus the
@@ -108,8 +112,6 @@ public:
 		bigint_t point_preload = PoolHashPreload(roundInfo.get());
 		//bigint_t point_preload = PoolHashPreload_Nonbroken(roundInfo.get());
 		
-		
-		//TODO: weak Seen set & strong GoldenDiff cache
 
 		unsigned Ngd = 1<<(16+2);
 		std::vector<std::pair<uint64_t, uint32_t>> pointidxbank(Ngd);
@@ -118,71 +120,83 @@ public:
 		std::minstd_rand rand_engine(seeder());
 		std::uniform_int_distribution<uint32_t> uniform_distr;
 
+		
+
 		auto fastrand = [&]{
 			return uniform_distr(rand_engine);
 		};
 
 		double difftic = now()*1e-9;
-
-		for (unsigned i = 0; i < Ngd; i++)
-		{
-			uint32_t curridx = fastrand();
-
-			bigint_t point = point_preload;
-			point.limbs[0] = curridx;
-
-			for(unsigned j=0;j<roundInfo->hashSteps;j++){
-				PoolHashStep(point, roundInfo.get());
-			}
-
-			uint64_t point64 = ((uint64_t)point.limbs[7] << 32) + point.limbs[6];
-			pointidxbank[i] = std::make_pair(point64, curridx);
-
-		}
-
-		double diffgent = now()*1e-9;
-
-		std::sort(pointidxbank.begin(), pointidxbank.end());
-
+		std::array<uint32_t, 4> temp = { { roundInfo.get()->c[0], roundInfo.get()->c[1], roundInfo.get()->c[2], roundInfo.get()->c[3] } };
+		std::pair<uint32_t, std::array<uint32_t, BIGINT_WORDS / 2>> key = std::make_pair(roundInfo.get()->hashSteps, temp);
 		uint32_t GoldenDiff = 0;
-		uint64_t bestdistance = -1;
-		unsigned skipcount = 0;
-		unsigned overloadcount = 0;
-		for (unsigned i = 0; i < Ngd-1u; i++)
+		if (diffCache.find(key) == diffCache.end())
 		{
-			uint32_t aidx = pointidxbank[i].second;
-			uint32_t bidx = pointidxbank[i+1].second;
-			if (aidx == bidx)
-			{
-				skipcount++;
-				continue;
-			}
 
-			uint64_t a = pointidxbank[i].first;
-			uint64_t b = pointidxbank[i+1].first;
-			uint64_t currabsdiff;
-			if (a>b)
-				currabsdiff = a-b;
-			else
-				currabsdiff = b-a;
+			tbb::parallel_for((unsigned)0, Ngd, [&](unsigned i) {
+				uint32_t curridx = fastrand();
+				bigint_t point = point_preload;
+				point.limbs[0] = curridx;
 
-			if (currabsdiff <= bestdistance)
+				for (unsigned j = 0; j < roundInfo->hashSteps; j++){
+					PoolHashStep(point, roundInfo.get());
+				}
+
+				uint64_t point64 = ((uint64_t)point.limbs[7] << 32) + point.limbs[6];
+				pointidxbank[i] = std::make_pair(point64, curridx);
+
+			});
+
+			double diffgent = now()*1e-9;
+
+			tbb::parallel_sort(pointidxbank.begin(), pointidxbank.end());
+						
+			uint64_t bestdistance = -1;
+			unsigned overloadcount = 0;
+			for (unsigned i = 0; i < Ngd - 1u; i++)
 			{
-				if (currabsdiff == bestdistance){
-					overloadcount++;
-				} else {
-					overloadcount = 0;
-					bestdistance = currabsdiff;
-					if (aidx > bidx)
-						GoldenDiff = aidx - bidx;
-					else
-						GoldenDiff = bidx - aidx;
+				uint32_t aidx = pointidxbank[i].second;
+				uint32_t bidx = pointidxbank[i + 1].second;
+				if (aidx == bidx)				
+					continue;
+				
+
+				uint64_t a = pointidxbank[i].first;
+				uint64_t b = pointidxbank[i + 1].first;
+				uint64_t currabsdiff;
+				if (a > b)
+					currabsdiff = a - b;
+				else
+					currabsdiff = b - a;
+
+				if (currabsdiff <= bestdistance)
+				{
+					if (currabsdiff == bestdistance){
+						overloadcount++;
+					}
+					else {
+						overloadcount = 0;
+						bestdistance = currabsdiff;
+						if (aidx > bidx)
+							GoldenDiff = aidx - bidx;
+						else
+							GoldenDiff = bidx - aidx;
+					}
 				}
 			}
+
+
+			diffCache[key] = GoldenDiff;
+			double diffsortscant = now()*1e-9;
+			Log(Log_Verbose, "Diff generate: %g\t sort-scan: %g", diffgent - difftic, diffsortscant - diffgent);
+
+		}
+		else 
+		{
+			GoldenDiff = diffCache[key];
+			Log(Log_Verbose, "\nFOUND DIFF! 0x%08x\n", GoldenDiff);
 		}
 
-		double diffsortscant = now()*1e-9;
-		Log(Log_Verbose, "Diff generate: %g\t sort-scan: %g", diffgent-difftic, diffsortscant-diffgent);
 
 		//quick and dirty 2 idx solution in case we run out of time
 		uint32_t bsInitVSsucks[] = {0, GoldenDiff};
@@ -193,17 +207,20 @@ public:
 		wide_xor(8, bestProof.limbs, pointa.limbs, pointb.limbs);
 		unsigned k = 2;
 
-		Log(Log_Verbose, "Best distance 0x%016x\t GoldenDiff 0x%08x. Skipped %u identical, Overload %u.", bestdistance, GoldenDiff, skipcount, overloadcount);
+	//	Log(Log_Verbose, "Best distance 0x%016x\t GoldenDiff 0x%08x. Skipped %u identical, Overload %u.", bestdistance, GoldenDiff, skipcount, overloadcount);
 		
 		unsigned nTrials=0;
 		double t=now()*1e-9;	// Work out where we are against the deadline
 		double timeBudget=tFinish-t;
 		static double hashrate = 1<<16;
+		static double avgHR = 0;
+		static int nSample = 0;
 		double timeBudgetInital = timeBudget;
 
 		unsigned maxIdx = roundInfo.get()->maxIndices;
 
 		while(1){
+			//Negative feedback loop which changes Nss with respsect to the time remaining
 			unsigned Nss = 0.8 * std::max(timeBudget,0.) * hashrate/roundInfo->hashSteps;
 			if (Nss == 0)
 			{
@@ -215,40 +232,47 @@ public:
 			
 			Log(Log_Debug, "Trial %d.", nTrials);
 
-
+			//Nmber of indicies of the final solution
 			int enabledIndicies = 2;
+
+			//Best indicies
 			std::array<uint32_t, 16> besti;
 
 			if (maxIdx >= 4) 
 			{
 				enabledIndicies = 4;
+				//Metapoint-index banks
 				std::vector<wide_idx_pair_4> M1pointIdxBank;
 				std::vector<wide_idx_pair_4> M2pointIdxBank;
 				std::vector<wide_idx_pair_4> M3pointIdxBank;
 				std::vector<wide_idx_pair_4>* currentBank = &M1pointIdxBank;
 
-
-				//0 depth:	Generate indicies
+				//Algorithmic overview
+				//2 depth:	Generate indicies
 				//			Generate points from indicies
 				//			XOR to make meta-points
 				//			Put metapoints and indicies into bank (1 base 1 implied)
 				//			Sort
-				//1 depth:	Take meta-points and indicies
+				//3 depth:	Take meta-points and indicies
 				//			XOR to make meta-meta points store indicies (2 base - 2 implied)
 				//			Sort
-				//2 depth:	Take meta-meta points and indicies 4 base - 4 implied
+				//4 depth:	Take meta-meta points and indicies 4 base - 4 implied
 				//			XOR to make meta^3-points
 				//			Sort
 				//
 
-				//gen
-				unsigned diff = GoldenDiff;//0x94632009;
+				
+				unsigned diff = GoldenDiff;
+				
+				//For the RNG
 				std::uniform_int_distribution<uint32_t> uniform_baserange(0u, (uint32_t)(-1) - diff);
-				M1pointIdxBank.reserve(Nss);
 
 #ifndef USECUDA
 
-				for (unsigned i = 0; i < Nss; i++)
+				//First meta index-point bank
+				M1pointIdxBank.resize(Nss);
+
+				tbb::parallel_for((unsigned)0, Nss, [&](unsigned i)	
 				{
 					uint32_t idx1 = uniform_baserange(rand_engine);
 					bigint_t point1 = pointFromIdx(roundInfo.get(), point_preload, idx1);
@@ -269,9 +293,10 @@ public:
 						((uint64_t)metapoint.limbs[1] << 32) + metapoint.limbs[0]);
 
 					newMetapoint.second[0] = idx1;
-
-					M1pointIdxBank.push_back(newMetapoint);
-				}
+					//idx1 + goldenDiff is implied
+										
+					M1pointIdxBank[i] = newMetapoint;
+				});
 
 #else
 				//GPU
@@ -291,11 +316,11 @@ public:
 				//);
 
 				halfbigint_t chbi = {{roundInfo->c[0], roundInfo->c[1], roundInfo->c[2], roundInfo->c[3] }};
-				std::vector<bigint_t> pointbank2 = genmpoints_on_GPU_fast_wrapper(roundInfo->hashSteps, chbi, point_preload, diff, idxbank);
+				auto M1pointIdxBankGPU = gensort_GPU(roundInfo->hashSteps, chbi, point_preload, diff, idxbank);
 
 				for (unsigned i = 0; i < Nss; i++)
 				{
-					bigint_t metapoint = pointbank2[i];
+					bigint_t metapoint = M1pointIdxBankGPU.first[i];
 					wide_idx_pair_4 newMetapoint;
 
 					newMetapoint.first.first = std::make_pair(
@@ -305,11 +330,25 @@ public:
 						((uint64_t)metapoint.limbs[3] << 32) + metapoint.limbs[2],
 						((uint64_t)metapoint.limbs[1] << 32) + metapoint.limbs[0]);
 
-					newMetapoint.second[0] = idxbank[i];
+					newMetapoint.second[0] = M1pointIdxBankGPU.second[i];
 					M1pointIdxBank.push_back(newMetapoint);
 				}
 
-//#define CHECKGEN
+#endif
+
+				double tic2 = now()*1e-9;
+				if((tic2 - tic) > 0.1*timeBudgetInital)
+					Log(Log_Verbose, "gen :%g", (tic2 - tic));
+				else
+					Log(Log_Debug, "gen :%g", (tic2 - tic));
+
+#ifndef USECUDA
+				//sort
+				tbb::parallel_sort(M1pointIdxBank.begin(), M1pointIdxBank.end());
+#endif
+
+
+#define CHECKGEN
 #ifdef CHECKGEN
 				//check
 				std::vector<wide_idx_pair_4> M1pointIdxBankCHECK;
@@ -336,42 +375,35 @@ public:
 
 					newMetapoint.second[0] = idx1;
 
-					assert(newMetapoint == M1pointIdxBank[i]);
-					for (int j = 0; j < 8; j++)
-					{
-						assert(metapoint.limbs[j] == pointbank2[i].limbs[j]);
-					}
-
 					M1pointIdxBankCHECK.push_back(newMetapoint);
+				}
+
+				tbb::parallel_sort(M1pointIdxBankCHECK.begin(), M1pointIdxBankCHECK.end());
+
+				for (unsigned i = 0; i < Nss; i++) {
+					assert(M1pointIdxBank[i] == M1pointIdxBankCHECK[i]);
 				}
 #endif
 
-#endif
 
-				double tic2 = now()*1e-9;
-				if((tic2 - tic) > 0.1*timeBudgetInital)
-					Log(Log_Verbose, "gen :%g", (tic2 - tic));
-				else
-					Log(Log_Debug, "gen :%g", (tic2 - tic));
-
-				//sort
-				std::sort(M1pointIdxBank.begin(), M1pointIdxBank.end());
 
 				int workingBankSize = std::max((int)M1pointIdxBank.size() - 1, 0);
 
 
-				do { //construct for using break to get to end
+				do { //construct using break to get to end
 					if (maxIdx < 8) 
 						break;
 
-					M2pointIdxBank.reserve(workingBankSize);
+					//M2pointIdxBank.reserve(workingBankSize);
+					M2pointIdxBank.resize(workingBankSize);
 					currentBank = &M2pointIdxBank;
 					enabledIndicies = 8;
-					unsigned skipcount = 0;
+					//unsigned skipcount = 0;
 					
-					//Depth 2:
-					for (int i = 0; i < workingBankSize; i++)
+					//Depth 3:
+					tbb::parallel_for((int)0, workingBankSize, [&](int i)				
 					{
+						
 						uint32_t aidx = M1pointIdxBank[i].second[0];
 						uint32_t bidx = M1pointIdxBank[i + 1].second[0];
 
@@ -379,43 +411,46 @@ public:
 						std::sort(indicies.begin(), indicies.end());
 						auto x = std::adjacent_find(indicies.begin(), indicies.end());
 
-						if (x != indicies.end())
+						if (x == indicies.end())
 						{
-							//Log(Log_Verbose, "Skipped index:%d", i);
-							skipcount++;
-							continue;
+							auto a = M1pointIdxBank[i].first;
+							auto b = M1pointIdxBank[i + 1].first;
+							auto currmmpoint = wap_xor(a, b);
+
+							wide_idx_pair_4 wip;
+
+							//Meta-meta points
+							wip.first = currmmpoint;
+
+							//Update indicies
+							wip.second[0] = aidx;
+							wip.second[1] = bidx;
+
+							//M2pointIdxBank.push_back(wip);
+							M2pointIdxBank[i] = wip;
 						}
-
-						auto a = M1pointIdxBank[i].first;
-						auto b = M1pointIdxBank[i + 1].first;
-						auto currmmpoint = wap_xor(a, b);
-
-						wide_idx_pair_4 wip;
-
-						//Meta-meta points
-						wip.first = currmmpoint;
-
-						//Update indicies
-						wip.second[0] = aidx;
-						wip.second[1] = bidx;
-
-						M2pointIdxBank.push_back(wip);
-
-					}
-					Log(Log_Debug, "Second loop. Skipped %d", skipcount);
-					std::sort(M2pointIdxBank.begin(), M2pointIdxBank.end());
+					});
+					//Log(Log_Debug, "Second loop. Skipped %d", skipcount);
+					tbb::parallel_sort(M2pointIdxBank.begin(), M2pointIdxBank.end());
 					
 					workingBankSize = std::max((int)M2pointIdxBank.size() - 1, 0);
 
+<<<<<<< HEAD
 					//Depth 3:
+=======
+
+
+					//Depth 4:
+>>>>>>> master
 					if (maxIdx < 16) 
 						break;
 
-					unsigned skipcount1 = 0;
+					//unsigned skipcount1 = 0;
 					enabledIndicies = 16;
 					currentBank = &M3pointIdxBank;
-					M3pointIdxBank.reserve(workingBankSize);
-					for (int i = 0; i < workingBankSize; i++)
+					M3pointIdxBank.resize(workingBankSize);
+
+					tbb::parallel_for((int)0, workingBankSize, [&](int i)
 					{
 						uint32_t aidx1 = M2pointIdxBank[i].second[0];
 						uint32_t aidx2 = M2pointIdxBank[i].second[1];
@@ -426,34 +461,30 @@ public:
 						std::sort(indicies.begin(), indicies.end());
 						auto x = std::adjacent_find(indicies.begin(), indicies.end());
 
-						if (x != indicies.end())
+						if (x == indicies.end())
 						{
-							skipcount1++;
-							continue;
+							auto a = M2pointIdxBank[i].first;
+							auto b = M2pointIdxBank[i + 1].first;
+							auto currmmpoint = wap_xor(a, b);
+
+							wide_idx_pair_4 wip;
+
+							//Meta-meta-meta points
+							wip.first = currmmpoint;
+
+							//Update indicies
+							wip.second[0] = aidx1;
+							wip.second[1] = aidx2;
+							wip.second[2] = bidx1;
+							wip.second[3] = bidx2;
+
+							//M3pointIdxBank.push_back(wip);
+							M3pointIdxBank[i] = (wip);
 						}
 
-						auto a = M2pointIdxBank[i].first;
-						auto b = M2pointIdxBank[i + 1].first;
-						auto currmmpoint = wap_xor(a, b);
+					});
 
-						wide_idx_pair_4 wip;
-
-						//Meta-meta-meta points
-						wip.first = currmmpoint;
-
-						//Update indicies
-						wip.second[0] = aidx1;
-						wip.second[1] = aidx2;
-						wip.second[2] = bidx1;
-						wip.second[3] = bidx2;
-
-						M3pointIdxBank.push_back(wip);
-
-					}
-
-					Log(Log_Debug, "Third loop. Skipped %d", skipcount1);
-
-					std::sort(M3pointIdxBank.begin(), M3pointIdxBank.end());
+					tbb::parallel_sort(M3pointIdxBank.begin(), M3pointIdxBank.end());
 
 					Log(Log_Debug, "Third loop");
 
@@ -461,7 +492,6 @@ public:
 				} while (0);
 
 				unsigned overloadcount = 0;
-				unsigned skipcount2 = 0;
 				wide_as_pair bestmmpoint = std::make_pair(std::make_pair(-1ull, -1ull), std::make_pair(-1ull, -1ull));
 				
 				bool bestivalid = 0;
@@ -485,11 +515,9 @@ public:
 					std::sort(indicies.begin(), indicies.begin() + enabledIndicies);
 					auto x = std::adjacent_find(indicies.begin(), indicies.begin() + enabledIndicies);
 
-					if (x != indicies.begin() + enabledIndicies)
-					{
-						skipcount2++;
+					if (x != indicies.begin() + enabledIndicies)					
 						continue;
-					}
+					
 
 					auto currmmpoint = wap_xor((*currentBank)[i].first, (*currentBank)[i + 1].first);
 
@@ -506,18 +534,15 @@ public:
 						}
 					}
 				}
-
-				//}
-
+				
 				//And now we do meta-meta points
 				double tocscan = now()*1e-9;
 				if((tocscan - tic2) > 0.1*timeBudgetInital)
 					Log(Log_Verbose, "sort-scan :%g", (tocscan - tic2));
 				else
 					Log(Log_Debug, "sort-scan :%g",  (tocscan - tic2));
-				Log(Log_Debug, "Final pass: Skipped %u inclusive idx, Overload %u", skipcount2, overloadcount);
-				//Log(Log_Verbose, "\nAmazing tom\n");
-
+				//Log(Log_Debug, "Final pass: Skipped %u inclusive idx, Overload %u", skipcount2, overloadcount);
+				
 				if (!bestivalid)
 				{
 					break;
@@ -526,6 +551,7 @@ public:
 
 			std::sort(besti.begin(), besti.begin() + enabledIndicies);
 
+			//generate the proof
 			bigint_t proof = HashReferencewPreload(roundInfo.get(), point_preload, enabledIndicies, &besti[0]);
 
 			//Number of idx
@@ -547,7 +573,10 @@ public:
 			{
 
 				hashrate = (Nss*roundInfo->hashSteps)/(std::max(toc-tic, 0.1));
+				avgHR += hashrate;
+				nSample++;
 				Log(Log_Verbose, "New hashrate %g.", hashrate);
+				Log(Log_Verbose, "==Avg hashrate %g.", avgHR / nSample);
 			}
 
 			timeBudget=tFinish-toc;
