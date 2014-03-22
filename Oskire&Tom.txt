@@ -1,0 +1,27 @@
+Hello David, 
+Initially began with understanding the expensive parts (hot looping) dependencies, pulling out unnecessary stuff in the PoolHash by creating a preload function (PoolHashPreload). Not that interesting 
+Next it was realised that .... This effectively reduces the space from 2^N to 2N. TODO OSCAR. MAYBE NOT RELEVANT ANYMORE 
+Here by generating 2 banks each containing lower and upper indices (where each index in the upper banks is > than all index in the lower bank). Points are then generated before iteratively combining (XORing) each lower and upper point to discover the best solution. This can be seen in HashReference2Banked. This was then extended to K "levels" (banks) (HashReferencekBanked)
+While fairly decent, allowing to obtain proofs in the e60 region, to achieve lower proofs (sub e040), it was necessary to exploit the cryptographic weaknesses. For a given constant and hash step amount, it is observed that if you take index I, and J, with a constant offset, then you find a pair of points that gives a very nice MSW(s).
+For example, if you find a pair which sets all the bits in the MSW to 0, you’ve just reduced your search space by 4 billion. The golden difference finder does exactly this as a precursor to the later algorithm. 
+As the server constant probably won’t change, only the maxIndices, we put the information into a map to allow easy recall in subsequent rounds. 
+The main algorithm is to take points and combine them to make n-level-meta points. That is, combining two points to make a "meta-point", we can then combine two meta-points to make a "meta-meta-point", and we can continue to do this.
+The flow of the N-levels method:
+1.	Find golden difference
+2.	Generate indices
+3.	XOR to make n-level-meta-points, 
+4.	Sort indices
+5.	Check maxIndicies (from server) to see if we can go another level deeper if yes, goto step 3
+6.	Final XORing between adjacent points to form the highest n-level meta point
+7.	Find minimum n-level meta point 
+8.	Generate the proof
+9.	Check if it’s the current best, if so change best solution and proof accordingly
+For each level or "depth", the number of indices increases two fold. We go only to a maximum depth of 4 (sixteen indices) providing maxIndicies is at least this value. We used STL primitives to build structures which can easily be operated upon using STL methods such as sort. As index comparisons must be unique (otherwise the distance would be zero), we make use of the STL adjacent sort to easily do this. 
+Admittedly as the procedure is effectively the same at each level, it can really be made more generic and tidied up into a much more modular design, allowing it to work for N levels. 
+For timing constraints there is also a feedback condition to modify the magnitude of the indices generated.  
+We then began to move the expensive point generation code onto the GPU. Did we finish...?
+Implementation wise, most of the separation of work came towards the end with Oskar branching to work on the GPU and Thomas remained on the CPU, developing the N-levels algorithm with TBB. 
+
+Lots to talk about at the oral
+
+Oskar and Thomas
