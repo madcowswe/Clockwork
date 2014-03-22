@@ -559,7 +559,7 @@ struct bigint_t_less_idx : public thrust::binary_function<uint32_t,uint32_t,bool
 int testcuda();
 
 
-__global__ void unzip_struct(
+__global__ void gather_unzip(
 	const uint32_t N,
 	const uint32_t depth,
 	const uint32_t* const __restrict__ map,
@@ -676,7 +676,7 @@ namespace bitecoin{
 
 		for (int i = 0; i < 7; i++)
 		{
-			unzip_struct <<<nblocks, 128>>> (N,i,map,mpointsGPUa,currlimb);
+			gather_unzip <<<nblocks, 128>>> (N,i,map,mpointsGPUa,currlimb);
 			if(e = cudaGetLastError()) printf("Cuda error %d on line %d\n", e, __LINE__);
 			thrust::stable_sort_by_key(currlimbptr, currlimbptr+N, maptptr);
 		}
@@ -699,7 +699,7 @@ namespace bitecoin{
 		std::vector<bigint_t> mpointsHost(N);
 		if(e = cudaMemcpy(mpointsHost.data(), mpointsGPUb, N * sizeof(bigint_t), cudaMemcpyDeviceToHost)) fprintf(stderr, "Cuda error %d on line %d\n", e, __LINE__);
 		std::vector<uint32_t> idxHost(N);
-		if(e = cudaMemcpy(idxHost.data(), idxbankGPUout, N * sizeof(bigint_t), cudaMemcpyDeviceToHost)) fprintf(stderr, "Cuda error %d on line %d\n", e, __LINE__);
+		if(e = cudaMemcpy(idxHost.data(), idxbankGPUout, N * sizeof(uint32_t), cudaMemcpyDeviceToHost)) fprintf(stderr, "Cuda error %d on line %d\n", e, __LINE__);
 
 		cudaFree(idxbankGPU);
 		cudaFree(idxbankGPUout);

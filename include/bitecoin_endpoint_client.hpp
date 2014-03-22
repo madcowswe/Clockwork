@@ -26,7 +26,7 @@
 
 #include <random>
 
-#define USECUDA
+//#define USECUDA
 #include "tbb/parallel_sort.h"
 #include "tbb/parallel_for.h"
 
@@ -188,13 +188,14 @@ public:
 
 			diffCache[key] = GoldenDiff;
 			double diffsortscant = now()*1e-9;
+			Log(Log_Verbose, "Best distance 0x%016x\t GoldenDiff 0x%08x. Overload %u.", bestdistance, GoldenDiff, overloadcount);
 			Log(Log_Verbose, "Diff generate: %g\t sort-scan: %g", diffgent - difftic, diffsortscant - diffgent);
 
 		}
 		else 
 		{
 			GoldenDiff = diffCache[key];
-			Log(Log_Verbose, "\nFOUND DIFF! 0x%08x\n", GoldenDiff);
+			Log(Log_Verbose, "FOUND DIFF! 0x%08x", GoldenDiff);
 		}
 
 
@@ -206,8 +207,6 @@ public:
 		bigint_t bestProof;
 		wide_xor(8, bestProof.limbs, pointa.limbs, pointb.limbs);
 		unsigned k = 2;
-
-	//	Log(Log_Verbose, "Best distance 0x%016x\t GoldenDiff 0x%08x. Skipped %u identical, Overload %u.", bestdistance, GoldenDiff, skipcount, overloadcount);
 		
 		unsigned nTrials=0;
 		double t=now()*1e-9;	// Work out where we are against the deadline
@@ -348,7 +347,7 @@ public:
 #endif
 
 
-#define CHECKGEN
+//#define CHECKGEN
 #ifdef CHECKGEN
 				//check
 				std::vector<wide_idx_pair_4> M1pointIdxBankCHECK;
@@ -435,14 +434,9 @@ public:
 					
 					workingBankSize = std::max((int)M2pointIdxBank.size() - 1, 0);
 
-<<<<<<< HEAD
-					//Depth 3:
-=======
-
 
 					//Depth 4:
->>>>>>> master
-					if (maxIdx < 16) 
+					if (maxIdx < 16)
 						break;
 
 					//unsigned skipcount1 = 0;
