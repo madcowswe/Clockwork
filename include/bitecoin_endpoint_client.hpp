@@ -188,7 +188,7 @@ public:
 		else 
 		{
 			GoldenDiff = diffCache[key];
-			Log(Log_Verbose, "\n\n\nFOUND DIFF! %d\n\n\n", GoldenDiff);
+			Log(Log_Verbose, "\nFOUND DIFF! 0x%08x\n", GoldenDiff);
 		}
 
 
