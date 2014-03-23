@@ -40,7 +40,7 @@ So looking at how these parameters apply, it makes sense: hashsteps and c are a 
 So we asked ourselves: why does supplying indices with some specific offset produce really good proofs?
 To get a good proof with two Indices, you get it from xor-ing two points. Good proofs have leading zeroes, so good points to xor have the same leading bits.
 Since the hash function is based on arithmetic primitives, and since there is a specific significance of the arithmetic difference between the two input Indices, we decided to write a function that finds the arithmetic difference between two points.
-We repeatedly picked an arbitrary Index, and paired it with another offset by GoldenDiff, and checked the difference between the outputs.
+We repeatedly picked an arbitrary Index, and paired it with another, offset by GoldenDiff, and checked the difference between the outputs.
 Jaws were dropped again, see screenshot in the screenshot folder.
 It was constant. All 256 bits.
 
