@@ -41,7 +41,7 @@ So we asked ourselves: why does supplying indicies with some specific offset pro
 To get a good proof with two Indicies, you get it from xor-ing two points. Good proofs have leading zeroes, so good points to xor have the same leading bits.
 Since the hash function is based on arithmetic primitives, and since there is a specific significance of the arithmetic difference between the two input Indicies, we decieded to write a function that finds the arithmetic difference between two points.
 We repeatedy picked an arbitrary Index, and paired it with another offset by GoldenDiff, and checked the difference between the outputs.
-Jaws were dropped again, see figure TODO.
+Jaws were dropped again, see screenshot in the screenshot folder.
 It was constant. All 256 bits.
 
 We suspected that this property wasn't unique to the specific value of GoldenDiff. And indeed, the pattern we saw was: if we stick an Index pair given by (base, base + diff_in), and get the points (pointa, pointb), then if diff_in is constant, then $diff_out = pointb-pointa$ is constant for ANY base.
@@ -73,7 +73,7 @@ So we have the GoldenDiff. Now what?
 It seems that over the range of hashsteps and c we tried that the GoldenDiff will produce points that have the first 31-33 bits or so aligned, i.e. their absolute difference is zero as far as the most significant limb is concerned.
 This means when xor-ed, the top 31-33 bits are cleared, using two Indicies.
 We can submit these combined points as the proof.
-But we have sometimes up to 16 indicies. What do we do with this opportunity?
+But we have sometimes up to 16 Indicies. What do we do with this opportunity?
 
 We could keep the xor-ed points as a meta-point, and combine meta-points to submit a 4 Index proof.
 Again, the naive way would be to generate a big array of meta-points, and try all combinations.
@@ -94,6 +94,74 @@ In summary, this is the flow of the N-levels method:
 9.	Check if it’s the current best, if so change best solution and proof accordingly
 
 A caveat is that we cannot use the same index twice, so during each pass of step 4 we cull any meta(meta(meta))point-index pair that involves the same index twice (or more).
+
+Each pass expects to clear on average log_2(N^2) zeroes. So with the inital 32 cleared zeroes from GoldenDiff alone, we expect to clear 32+k*log_2(N^2) bits. For example for a work size of N = 2^20 and with 3 passes we expect to clear around 150 bits. On our machine this work size runs in just under one second.
+
+
+Since the round times are variable, we need a mechanism to decide the work size dynamically to make the most optimal search while staying on time.
+As we found that most of our time was spent generating Indicies, we scale the work size linearly with the timeBudget.
+This became a little problematic as hashStpes became dynamic too. We compensated by making it scale linearly with that too.
+However, the sorting time doesn't scale with this, so we simply added a fudgefactor. Given more time, we would've modelled the relative time between hashing and sorting.
+A third option could've been ``dynamic bailing'', where each stage needs to stay on a target percentage deadline from the start of the algorithm to the deadline.
+
+
+At this stage we have a pretty solid algorithm, and we couldn't really find any more improvements or changes we wanted to do. So now we apply parallelisation.
+Step 2 and 3 are trivially parallelisable using TBB parallel_for and parallel_sort.
+We even parallelise step 4, not because it was a bottle neck, but because it was easy.
+
+Execution times for a worksize of N= ^20 on a 4 core hyperthreaded machine:
+generate: 0.42s
+3 pass sort and scan: 0.31s
+
+This ends up being our final submission. We explored porting the above algorithm to the GPU, but found that it was not more than tiwce as quick, and we were out of time by the end.
+
+Nevertheless, some interesting discoveries were made:
+
+Using the Thrust transform primitive, we used the provided wide_mul and wide_add, the GPU was much slower than the CPU in generating the points.
+We therefore ported a 256bit multiplication implementation in PTX assembly to use 128 bit inputs, and used a 256 bit addition assembly code [1].
+Now the point generation is twice as fast as the CPU with TBB, and according to the profiler is memory bandwith limited. The major reason is that the writeback of the generated points is strided across 8 words. This has poor coealesing performance across the threads.
+Changing the points storage from array of structures (AoS) to structures of arrays (SoA) should elimite this problem.
+
+Initially we used the Thrust sort primitive with a custom ordering operator to provide the lexicographic ordering semantics across the multiple limbs.
+This, however, was extremely slow. Online sources indicate that when sorting with custom ordering operators the algorithm is different from when sorting on integral types.
+Specifically thy are merge sort and radix sort, respectively.
+Intuitively we would think that mergesort should be fast, especially as the profiler verified that the sort primitive did indeed use shared memory to do the inital passes.
+In any case, all we can do is trust the sources that say that this type of sort is simply slow.
+
+Thus we need to convert the sort of the 8 word point with a one word sattelite value (the index) to a sort of one limb at a time, and still restricted to a one word sattelite value.
+To achive this, we leave the points and the index in their arrays, and use a map to index into these arrays.
+We use the following algorithm:
+1. Initialise this map to the identity sequence. (1, 2, 3...)
+2. for each limb, from least significant to most significant:
+3.    Gather into a temporary array (currlimb) the current limb from the points array using the map
+4.    Sort the map using the current limb as the key
+5. Gather the final points-index pairs to a new array using the map
+
+Execution times on GPU (see attached screenshot):
+Generate: 0.2s
+1 pass sort: 0.2s
+
+Given more time, optimisations such as SoA, and culling sorting on the lower limbs in the first couple of passes, could have been done.
+
+We can conclude from this discussion that there is no substitute for analyzing a problem properly and an algorithm with better inherent complexity.
+
+
+Finally, we would like to thank you for such high quality coursework. This has been one of, if not the best, programming competition that I (Oskar) have taken part in.
+
+Looking forward to the oral,
+
+Oskar and Thomas
+
+
+
+[1] https://devtalk.nvidia.com/default/topic/610914/cuda-programming-and-performance/modular-exponentiation-amp-biginteger/
+
+
+
+
+
+
+
 
 
 
@@ -119,3 +187,5 @@ Implementation wise, most of the separation of work came towards the end with Os
 Lots to talk about at the oral
 
 Oskar and Thomas
+
+
