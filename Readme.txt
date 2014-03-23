@@ -1,4 +1,7 @@
 
+Bitecoin writeup
+
+We realise that this is quite a long writeup, but we want to share the full story.
 
 We started by analysing the HashReference function, to see how the proofs were generated.
 It was clear that this coursework was set up to (to some degree) mimic the way proof of work systems like bitcoin operate.
