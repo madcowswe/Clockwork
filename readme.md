@@ -57,7 +57,7 @@ We therefore implemented a diff-cache which used the pair c and numsteps as the 
 
 
 So, we have at this stage established that the name of the game is to find this GoldenDiff as fast as possible, because nothing indicated that the deployed version would get constant hashsteps and c.
-Our previous insight was that GoldenDiff = argmin[diff_in](abs(pointb-pointa)).
+Our previous insight was that GoldenDiff = argmin(diff_in)(abs(pointb-pointa)).
 The naive algorithm is to simply generate a large amount of index-point pairs and find the absolute difference between all combinations. That is O(n^2) comparisons.
 But if we sort the points (and implicitly the index), we can then scan the sorted array for the best adjacent pairs.
 As sorting is O(n log n), this provides a massive speedup.
@@ -88,13 +88,14 @@ We could call this our proof, and submit it.
 But, we could go further, and instead of picking the best result, we stick all results into an array, sort that, xor adjacent pairs, and now pick the best. This then becomes and 8 index solution. Repeat for 16 index solution.
 
 In summary, this is the flow of the N-levels method:
-1.	Find golden difference, 120 ms constant
-2.	Generate point-index pairs, O(N) - slowest part
-3.	Sort indices, O(N log N) - significant
-4.	XOR adjacent points to make n-level-meta-points, O(N) - very fast
-5.	Check maxIndicies (from server) to see if we can go another level deeper if yes, goto step 3
-7.	Scan for minimum n-level meta point, O(N) - very fast
-9.	Check if it’s the current best, if so change best solution and proof accordingly
+
+1. Find golden difference, 120 ms constant
+2. Generate point-index pairs, O(N) - slowest part
+3. Sort indices, O(N log N) - significant
+4. XOR adjacent points to make n-level-meta-points, O(N) - very fast
+5. Check maxIndicies (from server) to see if we can go another level deeper if yes, goto step 3
+7. Scan for minimum n-level meta point, O(N) - very fast
+9. Check if it’s the current best, if so change best solution and proof accordingly
 
 A caveat is that we cannot use the same index twice, so during each pass of step 4 we cull any meta(meta(meta))point-index pair that involves the same index twice (or more).
 
@@ -134,10 +135,11 @@ In any case, all we can do is trust the sources that say that this type of sort 
 Thus we need to convert the sort of the 8 word point with a one word satellite value (the index) to a sort of one limb at a time, and still restricted to a one word satellite value.
 To achieve this, we leave the points and the index in their arrays, and use a map to index into these arrays.
 We use the following algorithm:
+
 1. Initialise this map to the identity sequence. (1, 2, 3...)
 2. for each limb, from least significant to most significant:
-3.  Gather into a temporary array (currlimb) the current limb from the points array using the map
-4.  Sort the map using the current limb as the key
+3. Gather into a temporary array (currlimb) the current limb from the points array using the map
+4. Sort the map using the current limb as the key
 5. Gather the final points-index pairs to a new array using the map
 
 Execution times on GPU (see attached screenshot):
