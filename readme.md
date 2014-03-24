@@ -1,286 +1,168 @@
-Overview
-========
 
-The idea of this coursework is to develop an accelerator for a
-fake crypt-currency (see bit-coin or doge-coin for some "real"
-currencies). Your goal is to maximise the number of coins
-you can mine within the exercise.
+Bitecoin writeup
 
-There will be three macro rounds of "mining", where all
-eligible miners will compete for a fixed pool of
-coins. Within each round there will be multiple distinct
-micro-rounds, and in each micro-round someone will
-win a coin. In later stages the number of coins available
-will increase. The maximum that any one miner can win per
-macro-round is 80% of the coins - once they hit that limit,
-I'm afraid they'll be kicked out to give the others a go
-(though they will obviously be rewarded in the marks).
+We realise that this is quite a long writeup, but we want to share the full story.
 
-In order to enter a round, the miner must be submitted
-before the round cutoff time and date. Once a miner
-has entered a specific round it cannot be updated or
-modified, but it will be able to take part in all
-other remaining rounds. The cutoff dates for the rounds
-are:
+We started by analysing the HashReference function, to see how the proofs were generated.
+It was clear that this coursework was set up to (to some degree) mimic the way proof of work systems like bitcoin operate.
+However, these use cryptographically strong proof of work systems, while this implementation looks like it was designed to be broken.
+Just like a CTF (http://en.wikipedia.org/wiki/Capture_the_flag#Computer_security).
 
- - Friday 21st, 23:59. Coin weighting 1.
- - Saturday 22st, 23:59. Coin weighting 2.
- - Monday 24th, 23:59. Coin weighting 3.
- 
-The final round is also the hard coursework submission deadline - after
-this point the marks drop to zero.
- 
-The coursework will be assesed according to three
-criterias:
+What was immediately peculiar with this implementation is that we are free to supply multiple nonces to be included in the hashing, while with implementations like bitcoin, there is only a single 32 bit field to permute.
+Digging further we discovered two things:
+The hash function seemed very simple and did not look like any strong hash we had seen, and more importantly, the entire hashing operation is done separately for every nonce, and the result is combined with a xor.
 
- - 50% : Performance. How many coins did you win?
-		 The reward process is non-linear, to avoid a
-         complete winner takes all scenario but a very
-		 large amount of the marks is determined soley
-		 by how fast your miner is.
- 
- - 40% : Applying techniques from the course. So
-         I need to see examples of where you have
-		 tried to used things like TBB or OpenCL, and where you
-         have tried to analyse dependencies or transform
-         iteration spaces.
+Before getting further, some terminology:
+* Index (with big I to distinguish it) is used interchangeably for a nonce, as this is the terminology used in the supplied code.
+* Point. This is what the code calls an intermediate result of the hash function (originating from a single nonce) before it has been xor-ed to become the final proof.
 
- - 10% : Execution and compilation. How much did I
-         have to modify code to make it work?
+The expensive operation in this scheme, at least on first sight, appears to be to compute the hash function itself. It requires many iterations (if you can cal ~25 many) of 256 bit arithmetic operations.
+In regular crypto currencies you are forced to simply try random nonces, compute the expensive hash, and check the result.
 
-Your miners will compete with each other in
-real-time on Amazon EC2 g2.2xlarge instances. The
-specifications are freely available, so you can look at the relative
-power of the GPU and the CPU. TBB and OpenCL 1.1 will both be
-available.
+In our case, we can capitalise on the fact that indices are combined after the hash function. This means that if we compute N points using N indices, we can produce O(N^2) point combinations.
+In effect we can try O(N^2) very cheap (a single wide xor) combinations for O(N) expensive operations.
+If we chose to combine k indices, we can get O(N^k) combinations doing O(kN) expensive operations.
 
-Running the executables
-=======================
+We implemented an Index-pair brute forcing algorithm, and then generalised this to a general recursive k-points brute forcing algorithm.
+This is pretty cool, and our plan for about one day was to come up with a very elaborate xor brute forcing engine on the GPU.
+The original sketches which involved fancy rotating buffers looked like clockwork, and hence the name, which stuck.
 
-There are two main executables in the distribution, built
-from source files of the same name:
+However, as we were brute forcing along trying out this idea on the server using the CPU and using two Indices, we spotted a pattern.
+When we printed out the chosen best Index pair, the most significant hex digits would occur as specific pairs.
+More specifically we saw 0xa... and 0x1... were always paired, and 0xb.. and 0x0... was always paired, etc.
+When one went up, the other went down.
+So we set up our local server to do constant 30 second rounds, to give our pairwise brute force algorithm time to converge on the actual optimal solution, and printed out their difference. Jaws were dropped. The difference was 0x94632009. Every single time.
 
-- bitecoin_client : A basic, but slow, client, which can connect to an exchange
+We later found that this constant optimal difference between chosen indices (which we will call GoldenDiff) is a property of numsteps and c.
+In fact, in retrospect, we were very lucky to spot this in time, as later the server changed to ask for a random hashsteps, not a constant one, and the local server code asks for a random hashsteps too.
 
-- bitecoin_server : Implements a simply single-client server
+We set up the server to vary different parameters to see what we can change such that the GoldenDiff was still 0x94632009. It turns out that we could change the blockchain data, round ID, and salt, and the GoldenDiff was still the same.
+Changing either hashsteps or c changed the optimal Index difference.
+So looking at how these parameters apply, it makes sense: hashsteps and c are a property of the hashing function, while the other parameters vary the input data.
 
-There is also a hidden "exchange" server which implements
-multi-threaded networking, and so allows multiple clients
-to complete. The code is not available to you, but you can
-connect to an instance running on a machine I control (look
-in blackboard for the IP address and port).
+So we asked ourselves: why does supplying indices with some specific offset produce really good proofs?
+To get a good proof with two Indices, you get it from xor-ing two points. Good proofs have leading zeroes, so good points to xor have the same leading bits.
+Since the hash function is based on arithmetic primitives, and since there is a specific significance of the arithmetic difference between the two input Indices, we decided to write a function that finds the arithmetic difference between two points.
+We repeatedly picked an arbitrary Index, and paired it with another, offset by GoldenDiff, and checked the difference between the outputs.
+Jaws were dropped again, see screenshot in the screenshot folder.
+It was constant. All 256 bits.
 
-Both executables take arguments of the form:
+We suspected that this property wasn't unique to the specific value of GoldenDiff. And indeed, the pattern we saw was: if we stick an Index pair given by (base, base + diff_in), and get the points (pointa, pointb), then if diff_in is constant, then $diff_out = pointb-pointa$ is constant for ANY base.
+That is, there is a constant mapping from diff_in -> diff_out.
+The significance of GoldenDiff is that it happens to be the the diff_in such that abs(diff_out) is minimised.
 
-    ./bitecoin_XXXX chosen-identifier log-level connection-type [connection-args]
+This property is, again, independent of input (only dependent on hashsteps and c).
+That is, once we have found the GoldenDiff, we can use it on all rounds with the same c and hashsteps.
+We therefore implemented a diff-cache which used the pair c and numsteps as the key.
 
-chosen-identifier : The name you are using to identify a
-  particular server (exchange) or a client. The name must
-  be unique, and the exchange server will not allow multiple
-  people with the same id.
 
-log-level : An integer parameter saying how much debug output
-  you want to see. 0 is fatal errors, 5 is all debugging information.
+So, we have at this stage established that the name of the game is to find this GoldenDiff as fast as possible, because nothing indicated that the deployed version would get constant hashsteps and c.
+Our previous insight was that GoldenDiff = argmin[diff_in](abs(pointb-pointa)).
+The naive algorithm is to simply generate a large amount of index-point pairs and find the absolute difference between all combinations. That is O(n^2) comparisons.
+But if we sort the points (and implicitly the index), we can then scan the sorted array for the best adjacent pairs.
+As sorting is O(n log n), this provides a massive speedup.
 
-connection-type : indicates how you want to connect, and
-  can be: `tcp-client`, `tcp-server`, or `file`.
-  
-  tcp-client connects to an existing server and takes as parameters
-  the host address, and the port number.
-  
-  tcp-server tells the executable to create a listening port, and
-  wait for someone else to connect.
-  
-  file requires a pair of file names to be given, with "-" for standard
-  files. The first file is the input stream, the second is the output
-  stream.
+With a point-index set of 2^16 elements, we go from finding the GoldenDiff in several seconds to 30 milliseconds. Sweet!
 
-For example, to set up a server and connect a client over tcp, you
-could do:
+Now the issue is: We have further algorithmic steps (which will be described later), but which requires knowledge of GoldenDiff. How do we chose how many elements are required to try in order to guarantee to a good enough probability that we will find Golden diff?
+We consider the fact that sorting and scanning N elements is equivalent to doing N^2 pair comparisons, as it will, as discussed before, find the same result.
+We know that the space to search for GoldenDiff is the 32 bit space.
+Trying a combination, we have the probability of finding GoldenDiff is 1 / 2^32. Therefore the probability of not finding GoldenDiff is 1-(1 / 2^32). The probability of not finding GoldenDiff after N^2 combinations is (1-(1/2^32))^(N^2).
+We say we want this probability to be 0.01 and ask wolfram alpha to invert this for us, and find N=140600.
+This runs in only 60ms. As we plan to implement the diff cache, we only have to pay this penalty on cache misses, so we double the number wolfram alpha gives us just for good measure.
+Thus we have concluded that we are pretty much guaranteed to find the GoldenDiff in 120 milliseconds.
 
-    ./bitecoin_server MyServer 4 tcp-server 4000
+So we have the GoldenDiff. Now what?
+It seems that over the range of hashsteps and c we tried that the GoldenDiff will produce points that have the first 31-33 bits or so aligned, i.e. their absolute difference is zero as far as the most significant limb is concerned.
+This means when xor-ed, the top 31-33 bits are cleared, using two Indices.
+We can submit these combined points as the proof.
+But we have sometimes up to 16 Indices. What do we do with this opportunity?
 
-in one terminal, then:
+We could keep the xor-ed points as a meta-point, and combine meta-points to submit a 4 Index proof.
+Again, the naive way would be to generate a big array of meta-points, and try all combinations.
+Our goal is to find meta-points with the best aligned most significant bits. Before we used sorting to find the smallest absolute difference. What is neat is that happens to coincide with aligned most significant bits.
+So we use sorting to compress the O(N^2) comparisons to O(n log n) again.
 
-    ./bitecoin_client MyClient 4 tcp-client localhost 4000
+So now all we have to do is scan the list, xoring all adjacent pairs, and pick the smallest result.
+We could call this our proof, and submit it.
+But, we could go further, and instead of picking the best result, we stick all results into an array, sort that, xor adjacent pairs, and now pick the best. This then becomes and 8 index solution. Repeat for 16 index solution.
 
-in another terminal on the same machine. You should see the
-server start up, then once the client connects they'll start
-running the protocol and the client will "mine".
+In summary, this is the flow of the N-levels method:
+1.	Find golden difference, 120 ms constant
+2.	Generate point-index pairs, O(N) - slowest part
+3.	Sort indices, O(N log N) - significant
+4.	XOR adjacent points to make n-level-meta-points, O(N) - very fast
+5.	Check maxIndicies (from server) to see if we can go another level deeper if yes, goto step 3
+7.	Scan for minimum n-level meta point, O(N) - very fast
+9.	Check if it’s the current best, if so change best solution and proof accordingly
 
-Or if you know that there is a server or exchange running
-at $ADDRESS on $PORT, connect your client to it with:
+A caveat is that we cannot use the same index twice, so during each pass of step 4 we cull any meta(meta(meta))point-index pair that involves the same index twice (or more).
 
-    ./bitecoin_client MyClient 4 tcp-client $ADDRESS $PORT
-    
-For a valid exchange address and port look in the blackboard description.
-I decided putting it in github was not a good idea. The exchanges
-may occasionally go down, in which case your clients will get
-kicked out, but they should come back eventually. There should
-be some active miners in the exchange at all times, though none
-of them are very fast.
+Each pass expects to clear on average log_2(N^2) zeroes. So with the initial 32 cleared zeroes from GoldenDiff alone, we expect to clear 32+k*log_2(N^2) bits. For example for a work size of N = 2^20 and with 3 passes we expect to clear around 150 bits. On our machine this work size runs in just under one second.
 
-You may also wish to run client and server connected via their
-stdin and stdout, though it is a little more verbose. In bash, you
-can do it via:
 
-    mkfifo .reverse
-	./bitecoin_client MyClient 2 file .reverse - | (./bitecoin_server MyServer 2 file - .reverse &> /dev/null)
+Since the round times are variable, we need a mechanism to decide the work size dynamically to make the most optimal search while staying on time.
+As we found that most of our time was spent generating Indices, we scale the work size linearly with the timeBudget.
+This became a little problematic as hashSteps became dynamic too. We compensated by making it scale linearly with that too.
+However, the sorting time doesn't scale with this, so we simply added a fudgefactor. Given more time, we would've modelled the relative time between hashing and sorting.
+A third option could've been ``dynamic bailing'', where each stage needs to stay on a target percentage deadline from the start of the algorithm to the deadline.
 
-Note that you'll also get interleaved logging if you don't
-surpress the server output, and choose to run them in the
-same terminal.
 
-Once the client is running, you'll see it is printing information
-about the transactions it is taking part in, such as
-when it is waiting for a round to start, when it is
-trying to find a good hash, and how the round eventually
-finished. You can of course look at the protocol information
-more deeply in your program.
+At this stage we have a pretty solid algorithm, and we couldn't really find any more improvements or changes we wanted to do. So now we apply parallelisation.
+Step 2 and 3 are trivially parallelisable using TBB parallel_for and parallel_sort.
+We even parallelise step 4, not because it was a bottle neck, but because it was easy.
 
-Looking at the code
-===================
+Execution times for a work size of N= ^20 on a 4 core hyper threaded machine:
+Generate: 0.42s
+3 pass sort and scan: 0.31s
 
-The code is written in a rambling style, and there has been
-no attempt to design it well. It is a mis-mash of different
-parts, written at different points over about six months since
-I first thought of this coursework. It is reasonably robust (I did
-a lot of fuzz testing on the exchange/client interaction), but is certainly
-not production quality, and shouldn't be seen as an example of
-good design. Even in academia I would improve the code, but
-I've left it as is to provide more of a challenge.
+This ends up being our final submission. We explored porting the above algorithm to the GPU, but found that it was not more than twice as quick, and we were out of time by the end.
 
-Much of the code is dedicated to communication and networking,
-and from your point of view the important parts are likely to be:
+Nevertheless, some interesting discoveries were made:
 
-  - bitecoin_endpoint_client.hpp : This handles the state
-    machine for the client, and is somewhat responsible for
-	strategy.
+Using the Thrust transform primitive, we used the provided wide_mul and wide_add, the GPU was much slower than the CPU in generating the points.
+We therefore ported a 256bit multiplication implementation in PTX assembly to use 128 bit inputs, and used a 256 bit addition assembly code [1].
+Now the point generation is twice as fast as the CPU with TBB, and according to the profiler is memory bandwidth limited. The major reason is that the write back of the generated points is strided across 8 words. This has poor coalescing performance across the threads.
+Changing the point’s storage from array of structures (AoS) to structures of arrays (SoA) should eliminate this problem.
 
-  - bitecoin_hashing.hpp : This contains the reference
-    implementation for the hashing strategy, used by the
-	slow client for hashing, and the server for verification.
+Initially we used the Thrust sort primitive with a custom ordering operator to provide the lexicographic ordering semantics across the multiple limbs.
+This, however, was extremely slow. Online sources indicate that when sorting with custom ordering operators the algorithm is different from when sorting on integral types.
+Specifically they are merge sort and radix sort, respectively.
+Intuitively we would think that mergesort should be fast, especially as the profiler verified that the sort primitive did indeed use shared memory to do the initial passes.
+In any case, all we can do is trust the sources that say that this type of sort is simply slow.
 
-If you follow the code, you'll be able to see the path
-the client takes by pairing it up with the log messages.
-Following through with a debugger is highly recommended
-(though not if you're connected to an exchange, as you'll
-get kicked off due to timeouts).
+Thus we need to convert the sort of the 8 word point with a one word satellite value (the index) to a sort of one limb at a time, and still restricted to a one word satellite value.
+To achieve this, we leave the points and the index in their arrays, and use a map to index into these arrays.
+We use the following algorithm:
+1. Initialise this map to the identity sequence. (1, 2, 3...)
+2. for each limb, from least significant to most significant:
+3.  Gather into a temporary array (currlimb) the current limb from the points array using the map
+4.  Sort the map using the current limb as the key
+5. Gather the final points-index pairs to a new array using the map
 
-The hash operation
-============
+Execution times on GPU (see attached screenshot):
+Generate: 0.2s
+1 pass sort: 0.2s
 
-The server/exhange will initiate mining micro-rounds, and for each
-micro-round specifies a set of round parameters and the time alotted
-to that round. Clients must return the best solution they
-can within the time limit of the round, by trying random
-solutions and keeping the one with the best proof.
+Given more time, optimisations such as SoA, and culling sorting on the lower limbs in the first couple of passes, could have been done.
+We can conclude from this discussion that there is no substitute for analysing a problem properly and an algorithm with better inherent complexity. To quote wise old David “Parallelisation is no substitute for a better algorithm”.
 
-In this case the "solution" is a vector of one or more
-indices, in ascending order, and the "proof" is a 256
-bit integer. There is a hash function which does the
-operation:
+Finally, we would like to thank you for such high quality coursework. 
+This has been one of, if not the best, programming competition that I (Oskar) have taken part in. Not bad (Thomas).
 
-    bitecoin::HashReference(roundParameters,solution) -> proof
+Looking forward to the oral
 
-and the proof with the lowest numeric value is more likely to
-win. So if we have solution1 and solution2, and:
+Oskar and Thomas
 
-    bitecoin::HashReference(roundParameters,solution1) < bitecoin::HashReference(roundParameters,solution2)
 
-then solution 1 would be more likely to win out of the two.
 
-The hash function is somewhat expensive to execute, so the aim
-is to try as many solutions as possible in order to find the smallest
-hash, while staying within the time limits of the round. If you
-exceed the time limit of the round, then the your bid will be
-discounted. Note that it is the time limit as determined by the
-server - any delays due to networking are the clients problem.
-In the final evaluation, everyone will have identical machines and
-networking.
+[1] https://devtalk.nvidia.com/default/topic/610914/cuda-programming-and-performance/modular-exponentiation-amp-biginteger/
 
-If you return an incorrect hash then you will be kicked off the
-server as a potentially malicious actor.
 
-The hash function itself can be determined from the code, as it is
-less than 100 lines of code. Note that it is deliberately flawed
-(cryptographically), and contains opportunities to demonstrate
-the skills you have learnt in this course (and elsewhere).
 
-Getting started
-===============
 
-I would suggest starting by cloning `src/bitecoin_client.cpp` into
-a file `src/bitecoin_miner.cpp`, and creating a new class which
-inherits from `bitecoin::EndpointClient`. Then override
-`bitecoin::EndpointClient::MakeBid`, as that is where all the number
-crunching happens. Start just by copying the existing `MakeBid`, then
-think about how to optimise it.
 
-Some suggestions:
 
-- Look carefully at the data dependencies. Work out who is producing
-  what, and how it is used.
-  
-- Work out what can be done in parallel (obviously).
 
-- Try to isolate constant data from variable. 
 
-- Avoid recalculating.
-
-- Try to identify batches of computation, including different
-  types of parallel batches.
-
-- You may wish to adapt to the period of the round. Some rounds are
-  short, some are long. It may be worth ignoring certain rounds as
-  not worth worrying about, or focussing just on a particular length
-  of round
-
-- Within a given round, think about the optimal allocation of compute
-  time to different parts.
-  
-- There may be calculations which can be re-ordered or even partially
-  removed.
-
-Submission
-==========
-
-The submission will consist of a zip file containing:
-
- - The source files needed to compile your miner. The
-   miner can be based on a modified version of `src/bitecoin_client.cpp`,
-   and the main source file should be called `src/bitecoin_miner.cpp`.
- 
- - A readme.txt or readme.pdf which explains your approach
-   or strategy, and how you split the work up between the
-   pair.
-   
-When you submit determines which round you are in. If
-you submit before a deadline, you can freely modify
-the submission up to the deadline, at which point I
-will take a snapshot, and that will be your final
-submission.
-
-The OS will be the Amazon-provided linux for GPU instances, and
-the compiler g++ 4.7. I will enable SSE to the maximum level
-supported on the processor. You will be firewalled off from everything
-apart from the bitecoin exchange, so no trying to spin up worker
-instances. Also, consider the Imperial ICT computing and networking
-policies to extend to the Amazon instances - yes, we all know you can
-jump a chroot jail: let's just assume you can do it and move on.
-
-I will control compilation (though you can include your own makefiles),
-and the strategy will be to compile `src/bitecoin_miner.cpp`. Any
-extra cpp files should be named `src/bitecoin_miner_XXXX.cpp`, or
-`src/miner/XXXX.cpp` for some value of XXXX - they will get compiled
-in at the same time.
-
-Your miner will be launched with `src` as the working directory, so
-you can pick up any open cl kernels relative to this path (yes, I know,
-this is terrible practise).
-
-Note that I will go and fix any miners which are obviously failing
-for some reason, or which do not quite compile. However, this
-will lead to some reduction in marks in the execution
-and compilation part. I will not fix performance problems.
 
