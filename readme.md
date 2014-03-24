@@ -113,7 +113,7 @@ At this stage we have a pretty solid algorithm, and we couldn't really find any 
 Step 2 and 3 are trivially parallelisable using TBB parallel_for and parallel_sort.
 We even parallelise step 4, not because it was a bottle neck, but because it was easy.
 
-Execution times for a work size of N= ^20 on a 4 core hyper threaded machine:
+Execution times for a work size of N= 2^20 on a 4 core hyper threaded machine:
 Generate: 0.42s
 3 pass sort and scan: 0.31s
 
@@ -138,9 +138,9 @@ We use the following algorithm:
 
 1. Initialise this map to the identity sequence. (1, 2, 3...)
 2. for each limb, from least significant to most significant:
-3. Gather into a temporary array (currlimb) the current limb from the points array using the map
-4. Sort the map using the current limb as the key
-5. Gather the final points-index pairs to a new array using the map
+  1. Gather into a temporary array (currlimb) the current limb from the points array using the map
+  2. Sort the map using the current limb as the key
+3. Gather the final points-index pairs to a new array using the map
 
 Execution times on GPU (see attached screenshot):
 Generate: 0.2s
